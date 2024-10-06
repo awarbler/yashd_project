@@ -15,7 +15,7 @@ TARGETS = yashd yash
 all: $(TARGETS) # BUILD BOTH YASHD AND YASH
 
 # RULE to build the server executable(yashd)
-yash: $(OBJ_DIR)/yashd.o
+yashd: $(OBJ_DIR)/yashd.o
 	$(CC) $(CFLAGS) -o yashd $(OBJ_DIR)/yashd.o 
 # compile and link the yashd object file to create the executable yashd
 
@@ -23,6 +23,13 @@ yash: $(OBJ_DIR)/yashd.o
 # second line compiles and link the yash object file to create the executable yash
 yash: $(OBJ_DIR)/yash.o
 	$(CC) $(CFLAGS) -o yash $(OBJ_DIR)/yash.o 
+
+
+# Compile the yashd source file into an object file 
+# compile yash.c into yash.o, include the headers from the included directory
+$(OBJ_DIR)/yashd.o: $(SRC_DIR)/yashd.c $(INC_DIR)/yashd.h 
+	$(CC) $(CFLAGS) -I$(INC_DIR) -c $(SRC_DIR)/yashd.c -o $(OBJ_DIR)/yashd.o 
+
 
 # Compile the yashd source file into an object file 
 # compile yash.c into yash.o, include the headers from the included directory

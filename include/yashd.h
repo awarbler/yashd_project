@@ -8,6 +8,9 @@
 // including standard libraries for various functionalitites
 #include <stdio.h> // standard input output library 
 #include <stdlib.h> // standard library includes functions malloc() free() 
+#include <pthread.h> // pthread header
+#include <netinet/in.h> // for sockets /* inet_addr() */
+
 
 // function prototype for handle_client
 // this function is responsible for handling communication with a connected client in a seperate thread 

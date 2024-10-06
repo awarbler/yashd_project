@@ -13,4 +13,20 @@
 // log command to /tmp/yashd.log }
 
 
+// basic functionality for connecting to the server
+
+#include "../include/yashd.h"
+
+int main(int argc, char *argv[]){
+    if (argc <2) {
+        fprintf(stderr, "Usage: %s <server_ip>\n" , argv[0]);
+        exit(1);
+    }
+
+    // placeholder for connecting to the server and sending commands
+    printf("Client connecting to server %s\n", argv[1]);
+    return 0;
+}
+
+
 
