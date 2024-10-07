@@ -1,6 +1,6 @@
 // this is the header file
 
-// include a gurad to prevent mutiple inclusions of the header file
+// include a guard to prevent mutiple inclusions of the header file
 
 #ifndef YASHD_H // If yashd_h is not defined
 #define YASHD_H // define yashd_h
