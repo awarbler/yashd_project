@@ -50,15 +50,10 @@ Project Two
 # File Structure
 
 yashd_project/<br>
-|--src/<br>
-|     |___ yashd.c  # Server Code<br>
-|     |___ yash.c   # Client Code<br>
-|--include/<br>
-|     |__yashd.h    # Header file for shared definitions<br>
-|--obj/<br>
-|--tmp/<br>
-|     |__ yashd.log # Log file for testing<br>
-|<br>
+|___ yashd.c  # Server Code<br>
+|___ yash.c   # Client Code<br>
+|__yashd.h    # Header file for shared definitions<br>
+|__ yashd.log # Log file for testing<br>
 |--Makefile     # Makefile to compile the project <br>
 
 |- .gitignore VS version<br>
