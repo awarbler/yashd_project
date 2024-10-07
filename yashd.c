@@ -15,7 +15,7 @@
 
 // basic functionality for connecting to the server
 
-#include "../include/yashd.h"
+#include "yashd.h"
 
 int main(int argc, char *argv[]){
     if (argc <2) {

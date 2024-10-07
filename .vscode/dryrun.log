@@ -1,0 +1,9 @@
+make --dry-run --keep-going --print-directory
+make: Entering directory '/media/psf/iCloud Drive/Desktop/SCHOOL/EE382V/Week02 /project_two/yashd_project'
+gcc -Wall -pthread -c yashd.c -o yashd.o 
+gcc -Wall -pthread -o yashd.o
+ 
+gcc -Wall -pthread -c yash.c -o yash.o 
+gcc -Wall -pthread -o yash.o 
+make: Leaving directory '/media/psf/iCloud Drive/Desktop/SCHOOL/EE382V/Week02 /project_two/yashd_project'
+ 
