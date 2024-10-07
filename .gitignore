@@ -1,3 +1,6 @@
+# ignore a specific file 
+mock_server.c
+
 # Prerequisites
 *.d
 
