@@ -15,8 +15,8 @@
 
 // Troubleshooting the server
 // 1. Error binding name to stream socket: Address already in use 
-// Run: sudo lsof -i :3820
-// Run: sudo kill -9 <PID>
+// Run: lsof -i :3820
+// Run: kill -9 <PID>
 
 // basic functionality for connecting to the server
 
@@ -32,13 +32,19 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 void reusePort(int sock);
-void Serve(int psd, struct sockaddr_in from);
+void* serveClient(void *args);
 
 /* create thread argument struct for logRequest() thread */
 typedef struct LogRequestArgs {
   char request[200];
   struct sockaddr_in from;
 } LogRequestArgs;
+
+/* create thread argument struct for client thread */
+typedef struct {
+    int psd;
+    struct sockaddr_in from;
+} ClientArgs;
 
 /**
  * @brief  If we are waiting reading from a pipe and
@@ -147,34 +153,25 @@ int main(int argc, char **argv ) {
     int length;
     int childpid;
 
-    char* ThisHost = "localhost";
-
     // TO-DO: Initialize the daemon
     // daemon_init(server_path, 0);
     
-    printf("----TCP/Server running at host NAME: %s\n", ThisHost);
-    if  ( (hp = gethostbyname(ThisHost)) == NULL ) {
-      fprintf(stderr, "Can't find host %s\n", argv[1]);
-      exit(-1);
-    }
+    hp = gethostbyname("localhost");
     bcopy( hp->h_addr, &(server.sin_addr), hp->h_length);
     printf("(TCP/Server INET ADDRESS is: %s )\n", inet_ntoa(server.sin_addr));
     
     /** Construct name of socket */
-    server.sin_family = AF_INET;
-    /* OR server.sin_family = hp->h_addrtype; */
-    
+    server.sin_family = AF_INET;    
     server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_port = htons(3820);  
     
-    /** Create socket on which to send  and receive */
-    
+    /** Create socket on which to send and receive */
     sd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP); 
-    /* OR sd = socket (hp->h_addrtype,SOCK_STREAM,0); */
     if (sd<0) {
 	    perror("opening stream socket");
 	    exit(-1);
     }
+
     /** this allow the server to re-start quickly instead of waiting
 	  for TIME_WAIT which can be as large as 2 minutes */
     reusePort(sd);
@@ -192,23 +189,46 @@ int main(int argc, char **argv ) {
     }
     printf("Server Port is: %d\n", ntohs(server.sin_port));
     
-    /** accept TCP connections from clients and fork a process to serve each */
+    /** accept TCP connections from clients and thread a process to serve each request */
     listen(sd,4);
     fromlen = sizeof(from);
+    printf("Server is ready to receive\n");
     for(;;){
       psd  = accept(sd, (struct sockaddr *)&from, &fromlen);
-      childpid = fork();
-      if ( childpid == 0) {
-          close (sd);
-          Serve(psd, from);
+      if (psd < 0) {
+        perror("accepting connection");
+        continue;
       }
-      else{
-          printf("My new child pid is %d\n", childpid);
+
+      // Allocate memory for ClientArgs
+      ClientArgs *clientArgs = malloc(sizeof(ClientArgs));
+      if (clientArgs == NULL) {
+          perror("Error allocating memory for client arguments");
           close(psd);
+          continue;
       }
+      printf("Memore allocated for client arguments\n");
+
+      // Set the client arguments
+      clientArgs->psd = psd;
+      clientArgs->from = from;
+
+      // Create a new thread to serve the client
+      pthread_t thread;
+      if (pthread_create(&thread, NULL, serveClient, (void *)clientArgs) != 0) {
+        perror("Error creating client thread");
+        free(clientArgs);
+        close(psd);
+        continue;
+      }
+      printf("Thread created to serve client\n");
+
+      pthread_detach(thread); // Detach the thread to unblock it
+
     }
     // Destroy the mutex
     pthread_mutex_destroy(&lock);
+    return 0;
 }
 
 void *logRequest(void *args) {
@@ -247,14 +267,15 @@ void *logRequest(void *args) {
     pthread_exit(NULL);
  }
 
-void Serve(int psd, struct sockaddr_in from) {
+void* serveClient(void *args) {
+    ClientArgs *clientArgs = (ClientArgs *)args;
+    int psd = clientArgs->psd;
+    struct sockaddr_in from = clientArgs->from;
     char buf[512];
     int rc;
     struct  hostent *hp;
     pthread_t p;
     
-    // printf("Serving %s:%d\n", inet_ntoa(from.sin_addr),
-	  // ntohs(from.sin_port));
  
     if ((hp = gethostbyaddr((char *)&from.sin_addr.s_addr, sizeof(from.sin_addr.s_addr),AF_INET)) == NULL)
 	    fprintf(stderr, "Can't find host %s\n", inet_ntoa(from.sin_addr));
@@ -268,6 +289,9 @@ void Serve(int psd, struct sockaddr_in from) {
             perror("receiving stream  message");
             exit(-1);
         }
+
+        printf("Received: %s\n", buf);
+
         if (rc > 0){ // if there is data to read
             buf[rc]='\0';
 
@@ -278,7 +302,6 @@ void Serve(int psd, struct sockaddr_in from) {
             continue;
             }
             
-            printf("1. command: %s", buf);
             // Copy the request and client information to the struct
             strncpy(args->request, buf, sizeof(args->request) - 1);
             // args->request[sizeof(args->request) - 1] = '\0'; // Ensure null-termination
@@ -293,17 +316,18 @@ void Serve(int psd, struct sockaddr_in from) {
             }
             
             // TO-DO: Handle the command from the client
+            printf("Handling client command: %s\n", buf);
+            if (send(psd, buf, rc, 0) <0 )
+		          perror("sending stream message");
         }
         else { // connection closed by client 
-          printf("TCP/Client: %s:%d\n", inet_ntoa(from.sin_addr),
-          ntohs(from.sin_port));
-          printf("(Name is : %s)\n", hp->h_name);
-          printf("Disconnected..\n");
-          close (psd);
-          exit(0);
+          close(psd);
+          // exit(0);
+          pthread_exit(0);
         }
         printf("\n...another round...\n");
     }
+    pthread_exit(NULL);
 }
 
 void reusePort(int s)
