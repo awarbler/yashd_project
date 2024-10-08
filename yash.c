@@ -66,7 +66,7 @@ void handle_plain_text() {
     char line[BUFFER_SIZE] = {0};
 
     // the user can input multiple lines of text until the type eof (ctrl-d)
-    while (fgets, sizeof(line), stdin)
+    while (fgets(line, sizeof(line), stdin))
     {
         /* code */
         if (send(sockfd, line, strlen(line), 0) < 0) {
@@ -143,7 +143,7 @@ int main(int argc, char *argv[]){
 
         // check if hte command is a file redirecton command cat>file.txt
         if (strstr(command, ">") != NULL) {
-            send_command_to_server; // send command to the server
+            send_command_to_server(command); // send command to the server
             printf("Enter plain text (CTRL-D to end): \n");
             handle_plain_text(); // hnadle plain text for cat 
         } else { 
