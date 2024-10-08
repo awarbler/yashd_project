@@ -193,24 +193,23 @@ int main(int argc, char **argv)
   listen(sd, 4);
   fromlen = sizeof(from);
   printf("Server is ready to receive\n");
+
   /** Infinite loop to accept and server clients */
-  for (;;)
-  {
+  for (;;) {
     psd = accept(sd, (struct sockaddr *)&from, &fromlen);
-    if (psd < 0)
-    {
+    if (psd < 0) {
       perror("accepting connection");
       continue;
     }
 
     // Allocate memory for ClientArgs
     ClientArgs *clientArgs = malloc(sizeof(ClientArgs));
-    if (clientArgs == NULL)
-    {
+    if (clientArgs == NULL) {
       perror("Error allocating memory for client arguments");
       close(psd);
       continue;
     }
+
     printf("Memore allocated for client arguments\n");
 
     // Set the client arguments
@@ -219,8 +218,7 @@ int main(int argc, char **argv)
 
     // Create a new thread to serve the client
     pthread_t thread;
-    if (pthread_create(&thread, NULL, serveClient, (void *)clientArgs) != 0)
-    {
+    if (pthread_create(&thread, NULL, serveClient, (void *)clientArgs) != 0) {
       perror("Error creating client thread");
       free(clientArgs);
       close(psd);
@@ -297,25 +295,21 @@ void *serveClient(void *args)
     printf("(Name is : %s)\n", hp->h_name);
 
   /**  get data from  client and send it back */
-  for (;;)
-  { // infinite loop to keep the server running
-    printf("\n...server is waiting...\n");
-    if ((rc = recv(psd, buf, sizeof(buf), 0)) < 0)
-    { // read data from the client
-      perror("receiving stream  message");
+  for (;;) { 
+    printf("\n...server is waiting...\n"); // infinite loop to keep the server running
+    if ((rc = recv(psd, buf, sizeof(buf), 0)) < 0) { 
+      perror("receiving stream  message");// read data from the client
       exit(-1);
     }
 
     printf("Received: %s\n", buf);
 
-    if (rc > 0)
-    { // if there is data to read
-      buf[rc] = '\0';
+    if (rc > 0) { 
+      buf[rc] = '\0'; // if there is data to read
       printf("Server received command: %s\n", buf); // debugging output
 
       // remove the cmd prefix from the command before processing
-      if (strncmp(buf, "CMD ", 4) == 0)
-      {
+      if (strncmp(buf, "CMD ", 4) == 0) {
         memmove(buf, buf + 4, strlen(buf) - 3); // shift the buffer to remove cmd
       }
 
@@ -343,46 +337,59 @@ void *serveClient(void *args)
         pthread_detach(p); // Detach the thread to allow it to run independently
       }
 
+
+      // create pipe to capture stdout
+      int pipe_fd[2];
+
+      if (pipe(pipe_fd) == -1) {
+        perror("Pipe failed");
+        continue;
+      }
+
       // TO-DO: Handle the command from the client
+
+
       printf("Handling client command: %s\n", buf);
-      int pid = fork(); // Create a new process to execut the command 
-            if (pid == 0) { // Child process
-              // Redirect stdout and stderr to the client socket
-              dup2(psd, STDOUT_FILENO);
-              dup2(psd, STDERR_FILENO);
-              close(psd); // Close the socket descriptor
-              // flush stdout and stderr to ensure the oput is sent to the client immediately 
-              fflush(stdout);
-              fflush(stderr);
-              // split the received command into argument using strtok() 
-              char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
-              cmd_args[0] = strtok(buf, " \n");
-              int i = 1;
-              while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)
-              {
-                /* code */
-                i++;
-              }
-              cmd_args[i] = NULL; // NULL terminate the array for execvp
-              // executing the command execvp that we used in yash shell
-              if (execvp(cmd_args[0], cmd_args) < 0) { 
-                perror("Execute failed");
-              }
-              exit(0); // child process should exit after executing 
-            } else if (pid > 0) { // parent process 
-              wait(NULL); // wait for child process to finish 
-            }
-            if (send(psd, buf, rc, 0) <0 )
+
+      // Create a new process to execute the command 
+      int pid = fork(); 
+      if (pid == 0) {
+        // Child process// Redirect stdout and stderr to the client socket
+        dup2(psd, STDOUT_FILENO);
+        dup2(psd, STDERR_FILENO);
+        close(psd); // Close the socket descriptor
+
+        // flush stdout and stderr to ensure the oput is sent to the client immediately 
+        fflush(stdout);
+        fflush(stderr);
+
+        // split the received command into argument using strtok() 
+        char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
+        cmd_args[0] = strtok(buf, " \n");
+
+        int i = 1;
+        while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)i++;
+
+        cmd_args[i] = NULL; // NULL terminate the array for execvp
+        
+        // executing the command execvp that we used in yash shell
+        if (execvp(cmd_args[0], cmd_args) < 0) { 
+          perror("Execute failed");
+        }// child process should exit after executing 
+        exit(0); 
+      } else if (pid > 0) { 
+        wait(NULL); // parent process // wait for child process to finish 
+        if (send(psd, buf, rc, 0) <0 )
 		          perror("sending stream message");
-        }
-        else { // connection closed by client 
+      } else { // connection closed by client 
           close(psd);
           // exit(0);
           pthread_exit(0);
         }
         printf("\n...another round...\n");
     }
-    pthread_exit(NULL);
+  }
+    //pthread_exit(NULL);
 }
 
 
