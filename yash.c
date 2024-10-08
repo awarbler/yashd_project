@@ -30,10 +30,10 @@ void sig_handler(int signo) {
     }
 
     // Send the control message to the server
-    if (send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
+    if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
-    printf("\nControl signal sent to server. \n");
+    printf("Control signal sent to server. \n");
 }
 
 // A Test function to send a command to the server 
@@ -42,9 +42,8 @@ void send_command_to_server(const char *command) {
 
     // debuggin output: check what is being sent
     printf("client sending command: %s\n", command);
-
     // Format the message to be sent to the server 
-    snprintf(message, sizeof(message), "CMD %s\n", command);
+    snprintf(message, sizeof(message), "cmd %s\n", command);
 
     // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
@@ -60,6 +59,7 @@ void send_command_to_server(const char *command) {
     if (valread < 0) {
         perror("Error receiving response");
     } else if (valread > 0) {
+        printf("%s", buf); // print the servers response
         printf("Client received: %s", buf); // print the servers response
     }
 }
@@ -79,7 +79,7 @@ void handle_plain_text() {
     }
     // end of input to the server by closing the connection 
     shutdown(sockfd, SHUT_WR); // close write channel 
-    
+
 }
 
 
@@ -94,9 +94,6 @@ int main(int argc, char *argv[]){
         fprintf(stderr, "Usage: %s <server_ip>\n", argv[0]);
         return EXIT_FAILURE;
     }
-
-    signal(SIGINT, sig_handler);
-    signal(SIGTSTP, sig_handler);
 
     // create a sockt for communication ipv4, tcp 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <0) {
@@ -121,8 +118,8 @@ int main(int argc, char *argv[]){
     }
 
     // set up signal handlers for ctrl c and ctrl z 
-    //signal(SIGINT, sig_handler); // catch ctrl c sigint
-    //signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
+    signal(SIGINT, sig_handler); // catch ctrl c sigint
+    signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
     printf("Connected to server at %s:%d\n", argv[1], PORT);
 
@@ -130,9 +127,9 @@ int main(int argc, char *argv[]){
     while (1)
     {
         /* code */
-        printf("# "); // display prompt 
         char command[BUFFER_SIZE] = {0}; // buffer for user input 
-        
+        printf("# "); // display prompt 
+
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
             if (feof(stdin)) {
@@ -147,7 +144,7 @@ int main(int argc, char *argv[]){
         // remove the newline character from the input 
         command[strcspn(command, "\n")]  = 0;
 
-        // check if the command is a file redirecton command cat>file.txt
+        // check if hte command is a file redirecton command cat>file.txt
         if (strstr(command, ">") != NULL) {
             send_command_to_server(command); // send command to the server
             printf("Enter plain text (CTRL-D to end): \n");
@@ -157,10 +154,10 @@ int main(int argc, char *argv[]){
             send_command_to_server(command);
 
         }
-        
+
     }
     // close the socket 
-    
+
     printf("yash client running....\n");
     close(sockfd);
     return 0;
