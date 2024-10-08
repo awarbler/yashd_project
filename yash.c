@@ -40,6 +40,9 @@ void sig_handler(int signo) {
 void send_command_to_server(const char *command) {
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
+    // debuggin output: check what is being sent
+    printf("client sending command: %s\n", command);
+
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "cmd %s\n", command);
 
@@ -55,9 +58,9 @@ void send_command_to_server(const char *command) {
     // rec response from server 
     int valread = recv(sockfd, buf, BUFFER_SIZE, 0);
     if (valread < 0) {
-        perror("error receiving response");
+        perror("Error receiving response");
     } else if (valread > 0) {
-        printf("%s", buf); // print the servers response
+        printf("Client received: %s", buf); // print the servers response
     }
 }
 

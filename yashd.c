@@ -255,6 +255,7 @@ void Serve(int psd, struct sockaddr_in from) {
         }
         if (rc > 0){ // if there is data to read
             buf[rc]='\0';
+            printf("Server received command: %s\n", buf);// debugging output 
 
             // Allocate memory for LogRequestArgs
             LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
