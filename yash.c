@@ -1,31 +1,13 @@
 // this is where the client will be set up 
-
 /*
-  Step 1 Include necessar headers and global variables from book 
-  Step 2: Set up Test function to send a command to the server 
-  step 3: set up the signal handlers - ctrl c sigint control z sigtstp
-  step 4: Establish connewction to the server 
-  step 5: set up command input loop 
-  step 6 : close the connection 
-  step 7 main function 
-
-
-*/
-
-
-// Step 1 Include necessar headers and global variables from book
-#include "yashd.h"
-#include <stdio.h>          // standard i/o functions
-#include <stdlib.h>         // standard library functions exit
-#include <string.h>         // string handling functions eg strlen
-#include <arpa/inet.h>      // internet operations inetpton()
-#include <unistd.h>         // posix api for close () 
-#include <signal.h>         // signal handling sigint sigtstp 
-
-#define PORT 3820           // port number to connect to the server
-#define BUFFER_SIZE 1024    // buffer size for communication
-
-// pseduo code for key components
+ Step 1 Include necessary headers and global variables from the book 
+ Step 2: Set up the Test function to send a command to the server 
+ step 3: set up the signal handlers - ctrl c sigint control z sigtstp
+ step 4: Establish a connection to the server 
+ step 5: set up the command input loop 
+ step 6: close the connection 
+ step 7 main function 
+ // pseudo code for key components
 // main server(server_ip){
 // connect_to_server(server_ip, 3820);
 // while(1){
@@ -34,34 +16,49 @@
 // handle_response(); // display server response.
 //}
 //}
+*/
+// Step 1 Include necessar headers and global variables from book
+#include "yashd.h"
+#include <stdio.h>          // standard i/o functions
+#include <stdlib.h>         // standard library functions exit
+#include <string.h>         // string handling functions eg strlen
+#include <arpa/inet.h>      // internet operations inetpton()
+#include <unistd.h>         // posix api for close () 
+#include <signal.h>         // signal handling sigint sigtstp 
+#include <errno.h>          // error handling macros
+
+#define PORT 3820           // port number to connect to the server
+#define BUFFER_SIZE 1024    // buffer size for communication
+
+
 
 int sockfd = 0; // declare globally to use in signal handler
 
 
-// signal handler to manage ctrl c and ctrl z signals 
+// Signal handler to manage ctrl c and ctrl z signals 
 void sig_handler(int signo) {
-    char ctl_msg[BUFFER_SIZE] = {0};    // buffer for control message
+    char ctl_msg[BUFFER_SIZE] = {0};    // Buffer for control message
     if (signo ==SIGINT) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // send ctl c for ctrl-c
+        snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // Send ctl c for ctrl-c
     } else if (signo == SIGTSTP) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // send ctl z for ctrl-z
+        snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // Send ctl z for ctrl-z
     }
 
-    // send control message to the server
+    // Send the control message to the server
     if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
     printf("Control signal sent to server. \n");
 }
 
-// Test function to send a command to the server 
+// A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
-    char message[BUFFER_SIZE] = {0}; // buffer for the message to be sent 
+    char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
-    // format the message to be sent to the server 
+    // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "cmd %s\n", command);
 
-    // send the command to the server
+    // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
         perror("Failed to send command");
         return;
@@ -79,7 +76,26 @@ void send_command_to_server(const char *command) {
     }
 }
 
+// handle plain text input after issuing commands like cat 
+void handle_plain_text() {
+    char line[BUFFER_SIZE] = {0};
 
+    // the user can input multiple lines of text until the type eof (ctrl-d)
+    while (fgets, sizeof(line), stdin)
+    {
+        /* code */
+        if (send(sockfd, line, strlen(line), 0) < 0) {
+            perror("Failed to send text to the server");
+            break;
+        }
+    }
+    // end of input to the server by closing the connection 
+    shutdown(sockfd, SHUT_WR); // close write channel 
+    
+}
+
+
+#ifndef TESTING
 
 int main(int argc, char *argv[]){
 
@@ -123,7 +139,7 @@ int main(int argc, char *argv[]){
     while (1)
     {
         /* code */
-        char command[BUFFER_SIZE] = 0; // buffer for user input 
+        char command[BUFFER_SIZE] = {0}; // buffer for user input 
         printf("# "); // display prompt 
 
         // read command input from the user 
@@ -139,9 +155,18 @@ int main(int argc, char *argv[]){
 
         // remove the newline character from the input 
         command[strcspn(command, "\n")]  = 0;
+
+        // check if hte command is a file redirecton command cat>file.txt
+        if (strstr(command, ">") != NULL) {
+            send_command_to_server; // send command to the server
+            printf("Enter plain text (CTRL-D to end): \n");
+            handle_plain_text(); // hnadle plain text for cat 
+        } else { 
+            // Use the function Send_command_to_server 
+            send_command_to_server(command);
+
+        }
         
-        // send the command to the server using the function]
-        send_command_to_server(command);
     }
     // close the socket 
     
@@ -149,3 +174,5 @@ int main(int argc, char *argv[]){
     close(sockfd);
     return 0;
 }
+
+#endif
