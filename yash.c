@@ -1,13 +1,13 @@
 // this is where the client will be set up 
 /*
-  Step 1 Include necessar headers and global variables from book 
-  Step 2: Set up Test function to send a command to the server 
-  step 3: set up the signal handlers - ctrl c sigint control z sigtstp
-  step 4: Establish connewction to the server 
-  step 5: set up command input loop 
-  step 6 : close the connection 
-  step 7 main function 
-  // pseduo code for key components
+ Step 1 Include necessary headers and global variables from the book 
+ Step 2: Set up the Test function to send a command to the server 
+ step 3: set up the signal handlers - ctrl c sigint control z sigtstp
+ step 4: Establish a connection to the server 
+ step 5: set up the command input loop 
+ step 6: close the connection 
+ step 7 main function 
+ // pseudo code for key components
 // main server(server_ip){
 // connect_to_server(server_ip, 3820);
 // while(1){
@@ -35,30 +35,30 @@
 int sockfd = 0; // declare globally to use in signal handler
 
 
-// signal handler to manage ctrl c and ctrl z signals 
+// Signal handler to manage ctrl c and ctrl z signals 
 void sig_handler(int signo) {
-    char ctl_msg[BUFFER_SIZE] = {0};    // buffer for control message
+    char ctl_msg[BUFFER_SIZE] = {0};    // Buffer for control message
     if (signo ==SIGINT) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // send ctl c for ctrl-c
+        snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // Send ctl c for ctrl-c
     } else if (signo == SIGTSTP) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // send ctl z for ctrl-z
+        snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // Send ctl z for ctrl-z
     }
 
-    // send control message to the server
+    // Send the control message to the server
     if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
     printf("Control signal sent to server. \n");
 }
 
-// Test function to send a command to the server 
+// A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
-    char message[BUFFER_SIZE] = {0}; // buffer for the message to be sent 
+    char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
-    // format the message to be sent to the server 
+    // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "cmd %s\n", command);
 
-    // send the command to the server
+    // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
         perror("Failed to send command");
         return;
@@ -162,7 +162,7 @@ int main(int argc, char *argv[]){
             printf("Enter plain text (CTRL-D to end): \n");
             handle_plain_text(); // hnadle plain text for cat 
         } else { 
-            // send the command to the server using the function]
+            // Use the function Send_command_to_server 
             send_command_to_server(command);
 
         }
