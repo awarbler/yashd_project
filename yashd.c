@@ -1,18 +1,4 @@
 // This is where the server will be set up 
-// pseudo code key components
-
-// main() { 
-// daemonize(); // convert to a daemon
-// setup_socket(); // bind and listen on port 3820
-// while(1){client_fd = accept_connection(); // accept client connection
-// pthread_create(thread, handle_client, client_fd)// handle each client in a new thread
-//}
-//}
-// handle_client(client_fd){
-// read command from client, fork exec the command, send output back to client
-// log command to /tmp/yashd.log }
-
-
 // Troubleshooting the server
 // 1. Error binding name to stream socket: Address already in use 
 // Run: lsof -i :3820
@@ -294,6 +280,7 @@ void* serveClient(void *args) {
 
         if (rc > 0){ // if there is data to read
             buf[rc]='\0';
+            printf("Server received command: %s\n", buf);// debugging output 
 
             // Allocate memory for LogRequestArgs
             LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));

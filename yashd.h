@@ -5,11 +5,15 @@
 #ifndef YASHD_H // If yashd_h is not defined
 #define YASHD_H // define yashd_h
 
-// including standard libraries for various functionalitites
+// including standard libraries for various functionalitites for the client
 #include <stdio.h> // standard input output library 
 #include <stdlib.h> // standard library includes functions malloc() free() 
 #include <pthread.h> // pthread header
 #include <netinet/in.h> // for sockets /* inet_addr() */
+#include <arpa/inet.h>      // internet operations inetpton()
+#include <unistd.h>         // posix api for close () 
+#include <signal.h>         // signal handling sigint sigtstp 
+#include <errno.h>          // error handling macros
 
 // server headers
 #include <sys/types.h>

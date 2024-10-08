@@ -7,25 +7,10 @@
  step 5: set up the command input loop 
  step 6: close the connection 
  step 7 main function 
- // pseudo code for key components
-// main server(server_ip){
-// connect_to_server(server_ip, 3820);
-// while(1){
-// read_user_input(); // read command from user
-// send_command(); // send to server
-// handle_response(); // display server response.
-//}
-//}
 */
-// Step 1 Include necessar headers and global variables from book
+// Step 1 Include necessary headers and global variables from book
 #include "yashd.h"
-#include <stdio.h>          // standard i/o functions
-#include <stdlib.h>         // standard library functions exit
-#include <string.h>         // string handling functions eg strlen
-#include <arpa/inet.h>      // internet operations inetpton()
-#include <unistd.h>         // posix api for close () 
-#include <signal.h>         // signal handling sigint sigtstp 
-#include <errno.h>          // error handling macros
+
 
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
@@ -55,6 +40,9 @@ void sig_handler(int signo) {
 void send_command_to_server(const char *command) {
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
+    // debuggin output: check what is being sent
+    printf("client sending command: %s\n", command);
+
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "cmd %s\n", command);
 
@@ -70,9 +58,9 @@ void send_command_to_server(const char *command) {
     // rec response from server 
     int valread = recv(sockfd, buf, BUFFER_SIZE, 0);
     if (valread < 0) {
-        perror("error receiving response");
+        perror("Error receiving response");
     } else if (valread > 0) {
-        printf("%s", buf); // print the servers response
+        printf("Client received: %s", buf); // print the servers response
     }
 }
 
@@ -81,7 +69,7 @@ void handle_plain_text() {
     char line[BUFFER_SIZE] = {0};
 
     // the user can input multiple lines of text until the type eof (ctrl-d)
-    while (fgets, sizeof(line), stdin)
+    while (fgets(line, sizeof(line), stdin))
     {
         /* code */
         if (send(sockfd, line, strlen(line), 0) < 0) {
@@ -158,7 +146,7 @@ int main(int argc, char *argv[]){
 
         // check if hte command is a file redirecton command cat>file.txt
         if (strstr(command, ">") != NULL) {
-            send_command_to_server; // send command to the server
+            send_command_to_server(command); // send command to the server
             printf("Enter plain text (CTRL-D to end): \n");
             handle_plain_text(); // hnadle plain text for cat 
         } else { 
