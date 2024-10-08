@@ -7,25 +7,10 @@
  step 5: set up the command input loop 
  step 6: close the connection 
  step 7 main function 
- // pseudo code for key components
-// main server(server_ip){
-// connect_to_server(server_ip, 3820);
-// while(1){
-// read_user_input(); // read command from user
-// send_command(); // send to server
-// handle_response(); // display server response.
-//}
-//}
 */
-// Step 1 Include necessar headers and global variables from book
+// Step 1 Include necessary headers and global variables from book
 #include "yashd.h"
-#include <stdio.h>          // standard i/o functions
-#include <stdlib.h>         // standard library functions exit
-#include <string.h>         // string handling functions eg strlen
-#include <arpa/inet.h>      // internet operations inetpton()
-#include <unistd.h>         // posix api for close () 
-#include <signal.h>         // signal handling sigint sigtstp 
-#include <errno.h>          // error handling macros
+
 
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
