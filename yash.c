@@ -33,7 +33,7 @@ void sig_handler(int signo) {
     if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
-    printf("Control signal sent to server. \n");
+    printf("\nControl signal sent to server. \n");
 }
 
 // A Test function to send a command to the server 

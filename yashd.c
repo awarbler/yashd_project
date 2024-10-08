@@ -7,6 +7,7 @@
 // basic functionality for connecting to the server
 
 #include "yashd.h"
+#include "pipes.h"
 
 /* Initialize path variables */
 static char* server_path = "./tmp/yashd";
@@ -161,6 +162,8 @@ int main(int argc, char **argv ) {
     /** this allow the server to re-start quickly instead of waiting
 	  for TIME_WAIT which can be as large as 2 minutes */
     reusePort(sd);
+
+    /** Bind the socket to the server address */
     if ( bind( sd, (struct sockaddr *) &server, sizeof(server) ) < 0 ) {
       close(sd);
       perror("Error binding name to stream socket");
@@ -179,6 +182,7 @@ int main(int argc, char **argv ) {
     listen(sd,4);
     fromlen = sizeof(from);
     printf("Server is ready to receive\n");
+    /** Infinite loop to accept and server clients */
     for(;;){
       psd  = accept(sd, (struct sockaddr *)&from, &fromlen);
       if (psd < 0) {
@@ -217,11 +221,16 @@ int main(int argc, char **argv ) {
     return 0;
 }
 
+/**
+ * @brief this function handles logging the client requests into a log file.
+ */
+
 void *logRequest(void *args) {
     LogRequestArgs *logArgs = (LogRequestArgs *)args;
     char *request = logArgs->request;
     struct sockaddr_in from = logArgs->from;
 
+    // log time and client information 
     time_t rawtime;
     struct tm *timeinfo;
     char timeString[80];
@@ -231,7 +240,7 @@ void *logRequest(void *args) {
     timeinfo = localtime(&rawtime);
     strftime(timeString, 80, "%b %d %H:%M:%S", timeinfo);
 
-    pthread_mutex_lock(&lock); // wrap CS in lock ...
+    pthread_mutex_lock(&lock); // wrap CS in lock ...this prevents race conditions
     
     printf("Opening log file at path: %s\n", log_path);
     
@@ -253,6 +262,9 @@ void *logRequest(void *args) {
     pthread_exit(NULL);
  }
 
+/**
+ * @brief Function that handles serving a single client.
+ */
 void* serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
@@ -278,7 +290,7 @@ void* serveClient(void *args) {
 
         printf("Received: %s\n", buf);
 
-        if (rc > 0){ // if there is data to read
+        if (rc > 0) { // if there is data to read
             buf[rc]='\0';
             printf("Server received command: %s\n", buf);// debugging output 
 
@@ -308,52 +320,57 @@ void* serveClient(void *args) {
             }
             
             // TO-DO: Handle the command from the client
-            printf("Handling client command: %s\n", buf);
 
-            int pid = fork(); // Create a new process to execut the command 
+            // check if the command comtains a pipe 
+            if (has_pipe(buf)) {
+              printf("Handling piped command: %s\n", buf);
+              handle_pipe(buf); // call pipe handler
+              } else {
+                // Handle the command from the client
+                printf("Handling client command: %s\n", buf);
+                int pid = fork(); // Create a new process to execut the command 
+                
+                if (pid == 0) {
+                  // Redirect stdout and stderr to the client socket
+                  dup2(psd, STDOUT_FILENO);
+                  dup2(psd, STDERR_FILENO);
+                  close(psd); // Close the socket descriptor
+                  
+                  // flush stdout and stderr to ensure the oput is sent to the client immediately 
+                  fflush(stdout);
+                  fflush(stderr);
 
-            if (pid == 0) { // Child process
-              // Redirect stdout and stderr to the client socket
-              dup2(psd, STDOUT_FILENO);
-              dup2(psd, STDERR_FILENO);
-              close(psd); // Close the socket descriptor
+                  // split the received command into argument using strtok() 
+                  char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
+                  cmd_args[0] = strtok(buf, " \n");
+                  int i = 1;
+                  while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)
+                  {
+                    /* code */
+                    i++;
+                  }
+                  cmd_args[i] = NULL; // NULL terminate the array for execvp
+                  // executing the command execvp that we used in yash shell
+                  if (execvp(cmd_args[0], cmd_args) < 0) { 
+                    perror("Execute failed");
+                  }
+                  exit(0); // child process should exit after executing 
 
-              // flush stdout and stderr to ensure the oput is sent to the client immediately 
-              fflush(stdout);
-              fflush(stderr);
-
-              // split the received command into argument using strtok() 
-              char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
-              cmd_args[0] = strtok(buf, " \n");
-              int i = 1;
-              while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)
-              {
-                /* code */
-                i++;
+              } else if (pid > 0) {
+                wait(NULL); // wait for child process to finish 
               }
-              cmd_args[i] = NULL; // NULL terminate the array for execvp
-              // executing the command execvp that we used in yash shell
-              if (execvp(cmd_args[0], cmd_args) < 0) { 
-                perror("Execute failed");
-              }
-              exit(0); // child process should exit after executing 
-
-            } else if (pid > 0) { // parent process 
-              wait(NULL); // wait for child process to finish 
             }
-
-            if (send(psd, buf, rc, 0) <0 )
-		          perror("sending stream message");
-        }
-        else { // connection closed by client 
-          close(psd);
-          // exit(0);
-          pthread_exit(0);
+          } else { 
+            close(psd);
+            // exit(0);
+            free(clientArgs); // free the cient arguments structure 
+            pthread_exit(0);
         }
         printf("\n...another round...\n");
     }
-    pthread_exit(NULL);
-}
+    //pthread_exit(NULL); took out for testing 1047 am 
+  }
+
 
 void reusePort(int s)
 {
