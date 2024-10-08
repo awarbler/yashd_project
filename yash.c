@@ -30,7 +30,7 @@ void sig_handler(int signo) {
     }
 
     // Send the control message to the server
-    if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
+    if (send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
     printf("\nControl signal sent to server. \n");
@@ -44,7 +44,7 @@ void send_command_to_server(const char *command) {
     printf("client sending command: %s\n", command);
 
     // Format the message to be sent to the server 
-    snprintf(message, sizeof(message), "cmd %s\n", command);
+    snprintf(message, sizeof(message), "CMD %s\n", command);
 
     // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
@@ -95,6 +95,9 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
+    signal(SIGINT, sig_handler);
+    signal(SIGTSTP, sig_handler);
+
     // create a sockt for communication ipv4, tcp 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <0) {
         perror("Socket creation failed");
@@ -118,8 +121,8 @@ int main(int argc, char *argv[]){
     }
 
     // set up signal handlers for ctrl c and ctrl z 
-    signal(SIGINT, sig_handler); // catch ctrl c sigint
-    signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
+    //signal(SIGINT, sig_handler); // catch ctrl c sigint
+    //signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
     printf("Connected to server at %s:%d\n", argv[1], PORT);
 
@@ -127,9 +130,9 @@ int main(int argc, char *argv[]){
     while (1)
     {
         /* code */
-        char command[BUFFER_SIZE] = {0}; // buffer for user input 
         printf("# "); // display prompt 
-
+        char command[BUFFER_SIZE] = {0}; // buffer for user input 
+        
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
             if (feof(stdin)) {

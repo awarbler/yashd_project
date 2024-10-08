@@ -14,27 +14,9 @@
  */
 
 
-int has_pipe(const char *command){
-    return strchr(command, '|') != NULL; // return 1 if pipe i found else 0
-}
-
-void handle_pipe(const char *command) {
+int handle_pipe(char *cmd_left[], char *cmd_right[]) {
     int pipe_fd[2];
     pid_t pid1, pid2;
-    char *cmd1, *cmd2;
-
-    // split command by the pipe
-    cmd1 = strtok(command, "|");
-    cmd2 = strtok(NULL, "|");
-
-    if (!cmd1 || !cmd2) {
-        fprintf(stderr, "Invalid pipe command.\n");
-        return -1;
-    }
-
-    // trim leading and trailing space for both commands
-    cmd1 = strtok(cmd1, " \t\n");
-    cmd2 = strtok(cmd2, " \t\n");
 
     // create a pipe 
     if (pipe(pipe_fd) == -1) {
@@ -43,24 +25,21 @@ void handle_pipe(const char *command) {
     }
     // first child process to execute cmd1
     if (( pid1 == fork()) == 0) {
-        close(pipe_fd[0]); // close read end 
+        
         dup2(pipe_fd[1], STDOUT_FILENO); // redirect stdout to pipe write end
+        close(pipe_fd[0]); // close read end 
         close(pipe_fd[1]);
-
-        // execute first command
-        execlp(cmd1, cmd1, NULL);
-        perror("Execution failed");
+        execvp(cmd_left[0], cmd_left); // close read end 
+        perror("Execution failed for the left command");
         exit(EXIT_FAILURE);
     }
     // second child process to execute cmd1
     if (( pid2 == fork()) == 0) {
+        dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to pipe write end
         close(pipe_fd[1]); // close read end 
-        dup2(pipe_fd[0], STDOUT_FILENO); // redirect stdout to pipe write end
         close(pipe_fd[0]);
-
-        // execute first command
-        execlp(cmd2, cmd2, NULL);
-        perror("Execution failed");
+        execvp(cmd_right[0], cmd_right); // close read end 
+        perror("Execution failed for the right command");
         exit(EXIT_FAILURE);
     }
     // parent closes pipe and waits for both children to finish 
