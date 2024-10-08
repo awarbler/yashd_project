@@ -80,6 +80,7 @@ void send_command_to_server(const char *command) {
 }
 
 
+#ifndef TESTING
 
 int main(int argc, char *argv[]){
 
@@ -123,7 +124,7 @@ int main(int argc, char *argv[]){
     while (1)
     {
         /* code */
-        char command[BUFFER_SIZE] = 0; // buffer for user input 
+        char command[BUFFER_SIZE] = {0}; // buffer for user input 
         printf("# "); // display prompt 
 
         // read command input from the user 
@@ -149,3 +150,5 @@ int main(int argc, char *argv[]){
     close(sockfd);
     return 0;
 }
+
+#endif

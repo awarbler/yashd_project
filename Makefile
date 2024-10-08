@@ -38,6 +38,6 @@ yash.o: yash.c yashd.h
 # clean up rule to remove compiled object files and executables 
 clean:
 	@echo "cleaning up object files and executables....."
-	rm -f *.o yashd yash
+	rm -f *.o yashd yash mock_server test_yash
 
 
