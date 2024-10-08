@@ -1,5 +1,4 @@
 // this is where the client will be set up 
-
 /*
   Step 1 Include necessar headers and global variables from book 
   Step 2: Set up Test function to send a command to the server 
@@ -8,24 +7,7 @@
   step 5: set up command input loop 
   step 6 : close the connection 
   step 7 main function 
-
-
-*/
-
-
-// Step 1 Include necessar headers and global variables from book
-#include "yashd.h"
-#include <stdio.h>          // standard i/o functions
-#include <stdlib.h>         // standard library functions exit
-#include <string.h>         // string handling functions eg strlen
-#include <arpa/inet.h>      // internet operations inetpton()
-#include <unistd.h>         // posix api for close () 
-#include <signal.h>         // signal handling sigint sigtstp 
-
-#define PORT 3820           // port number to connect to the server
-#define BUFFER_SIZE 1024    // buffer size for communication
-
-// pseduo code for key components
+  // pseduo code for key components
 // main server(server_ip){
 // connect_to_server(server_ip, 3820);
 // while(1){
@@ -34,6 +16,21 @@
 // handle_response(); // display server response.
 //}
 //}
+*/
+// Step 1 Include necessar headers and global variables from book
+#include "yashd.h"
+#include <stdio.h>          // standard i/o functions
+#include <stdlib.h>         // standard library functions exit
+#include <string.h>         // string handling functions eg strlen
+#include <arpa/inet.h>      // internet operations inetpton()
+#include <unistd.h>         // posix api for close () 
+#include <signal.h>         // signal handling sigint sigtstp 
+#include <errno.h>          // error handling macros
+
+#define PORT 3820           // port number to connect to the server
+#define BUFFER_SIZE 1024    // buffer size for communication
+
+
 
 int sockfd = 0; // declare globally to use in signal handler
 
@@ -77,6 +74,24 @@ void send_command_to_server(const char *command) {
     } else if (valread > 0) {
         printf("%s", buf); // print the servers response
     }
+}
+
+// handle plain text input after issuing commands like cat 
+void handle_plain_text() {
+    char line[BUFFER_SIZE] = {0};
+
+    // the user can input multiple lines of text until the type eof (ctrl-d)
+    while (fgets, sizeof(line), stdin)
+    {
+        /* code */
+        if (send(sockfd, line, strlen(line), 0) < 0) {
+            perror("Failed to send text to the server");
+            break;
+        }
+    }
+    // end of input to the server by closing the connection 
+    shutdown(sockfd, SHUT_WR); // close write channel 
+    
 }
 
 
@@ -140,9 +155,18 @@ int main(int argc, char *argv[]){
 
         // remove the newline character from the input 
         command[strcspn(command, "\n")]  = 0;
+
+        // check if hte command is a file redirecton command cat>file.txt
+        if (strstr(command, ">") != NULL) {
+            send_command_to_server; // send command to the server
+            printf("Enter plain text (CTRL-D to end): \n");
+            handle_plain_text(); // hnadle plain text for cat 
+        } else { 
+            // send the command to the server using the function]
+            send_command_to_server(command);
+
+        }
         
-        // send the command to the server using the function]
-        send_command_to_server(command);
     }
     // close the socket 
     

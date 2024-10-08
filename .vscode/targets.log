@@ -7,7 +7,7 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 # This is free software: you are free to change and redistribute it.
 # There is NO WARRANTY, to the extent permitted by law.
 
-# Make data base, printed on Mon Oct  7 15:32:18 2024
+# Make data base, printed on Mon Oct  7 20:19:13 2024
 
 # Variables
 
@@ -60,16 +60,12 @@ MAKEFLAGS = pqrR
 # makefile
 CURDIR := /media/psf/iCloud Drive/Desktop/SCHOOL/EE382V/Week02 /project_two/yashd_project
 # environment
- 
 APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = true
 # environment
 LESSOPEN = | /usr/bin/lesspipe %s
-# environment
-VSCODE_L10N_BUNDLE_LOCATION = 
 # automatic
 *D = $(patsubst %/,%,$(dir $*))
 # environment
- 
 MFLAGS = -pqrR
 # environment
 SSH_AUTH_SOCK = /run/user/1000/keyring/ssh
@@ -88,7 +84,7 @@ MAKEFILE_LIST := Makefile
 # automatic
 @F = $(notdir $@)
 # environment
-VSCODE_PID = 1436791
+VSCODE_PID = 1482636
 # environment
 XDG_SESSION_TYPE = wayland
 # automatic
@@ -159,7 +155,6 @@ GIO_LAUNCHED_DESKTOP_FILE = /usr/share/applications/code.desktop
 .DEFAULT_GOAL := all
 # environment
 SYSTEMD_EXEC_PID = 2338
- 
 # environment
 DISPLAY = :0
 # environment
@@ -171,7 +166,7 @@ MAKE_VERSION := 4.3
 # environment
 MANAGERPID = 2230
 # environment
-GIO_LAUNCHED_DESKTOP_FILE_PID = 1436791
+GIO_LAUNCHED_DESKTOP_FILE_PID = 1482636
 # makefile (from 'Makefile', line 9)
 TARGETS = yashd yash 
 # environment
@@ -211,7 +206,7 @@ XDG_MENU_PREFIX = gnome-
 # environment
 GDMSESSION = ubuntu
 # variable set hash-table stats:
-# Load=98/1024=10%, Rehash=0, Collisions=3/134=2%
+# Load=97/1024=9%, Rehash=0, Collisions=2/133=2%
 
 # Pattern-specific Variable Values
 
@@ -219,9 +214,9 @@ GDMSESSION = ubuntu
 
 # Directories
 
-# . (device 77, inode 4418632): 18 files, no impossibilities.
+# . (device 77, inode 4418632): 17 files, no impossibilities.
 
-# 18 files, no impossibilities in 1 directories.
+# 17 files, no impossibilities in 1 directories.
 
 # Implicit Rules
 
@@ -230,25 +225,25 @@ GDMSESSION = ubuntu
 # Files
 
 yashd: yashd.o
- 
 #  Implicit rule search has not been done.
-#  Last modified 2024-10-07 15:30:51
+#  File does not exist.
 #  File has been updated.
-#  Successfully updated.
+#  Needs to be updated (-q is set).
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/5=0%
 #  recipe to execute (from 'Makefile', line 17):
 	$(CC) $(CFLAGS) yashd.o -o yashd
 
 # Not a target:
 yash.c:
-#  Implicit rule search has been done.
-#  Last modified 2024-10-07 15:10:12
-#  File has been updated.
-#  Successfully updated.
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
 
 # Not a target:
 Makefile:
 #  Implicit rule search has been done.
-#  Last modified 2024-10-07 15:31:30
+#  Last modified 2024-10-07 20:16:33
 #  File has been updated.
 #  Successfully updated.
 
@@ -258,32 +253,12 @@ clean:
 #  File has not been updated.
 #  recipe to execute (from 'Makefile', line 40):
 	@echo "cleaning up object files and executables....."
-	rm -f *.o yashd yash
+	rm -f *.o yashd yash mock_server test_yash
 
 yash: yash.o
 #  Implicit rule search has not been done.
-#  Implicit/static pattern stem: ''
-#  File does not exist.
-#  File has been updated.
-#  Needs to be updated (-q is set).
-# automatic
-# @ := yash
-# automatic
-# * := 
-# automatic
-# < := yash.o
-# automatic
-# + := yash.o
-# automatic
-# % := 
-# automatic
-# ^ := yash.o
-# automatic
-# ? := yash.o
-# automatic
-# | := 
-# variable set hash-table stats:
-# Load=8/32=25%, Rehash=0, Collisions=2/13=15%
+#  Modification time never checked.
+#  File has not been updated.
 #  recipe to execute (from 'Makefile', line 23):
 	$(CC) $(CFLAGS) yash.o -o yash
 
@@ -305,7 +280,8 @@ all: yashd yash
 # Not a target:
 yashd.c:
 #  Implicit rule search has been done.
-#  Last modified 2024-10-07 15:28:31
+#  Last modified 2024-10-07 19:18:41
+ 
 #  File has been updated.
 #  Successfully updated.
 
@@ -318,18 +294,35 @@ yashd.h:
 
 yash.o: yash.c yashd.h
 #  Implicit rule search has not been done.
-#  Last modified 2024-10-07 15:30:51
-#  File has been updated.
-#  Successfully updated.
+#  Modification time never checked.
+#  File has not been updated.
 #  recipe to execute (from 'Makefile', line 36):
- 
 	$(CC) $(CFLAGS) -c yash.c -o yash.o 
 
 yashd.o: yashd.c yashd.h
 #  Implicit rule search has not been done.
-#  Last modified 2024-10-07 15:28:34
+#  Implicit/static pattern stem: ''
+#  File does not exist.
 #  File has been updated.
-#  Successfully updated.
+#  Needs to be updated (-q is set).
+# automatic
+# @ := yashd.o
+# automatic
+# * := 
+# automatic
+# < := yashd.c
+# automatic
+# + := yashd.c yashd.h
+# automatic
+# % := 
+# automatic
+# ^ := yashd.c yashd.h
+# automatic
+# ? := yashd.c yashd.h
+# automatic
+# | := 
+# variable set hash-table stats:
+# Load=8/32=25%, Rehash=0, Collisions=2/13=15%
 #  recipe to execute (from 'Makefile', line 30):
 	$(CC) $(CFLAGS) -c yashd.c -o yashd.o 
 
@@ -347,12 +340,12 @@ yashd.o: yashd.c yashd.h
 
 # No general ('VPATH' variable) search path.
 
-# strcache buffers: 1 (0) / strings = 25 / storage = 194 B / avg = 7 B
-# current buf: size = 8162 B / used = 194 B / count = 25 / avg = 7 B
+# strcache buffers: 1 (0) / strings = 27 / storage = 220 B / avg = 8 B
+# current buf: size = 8162 B / used = 220 B / count = 27 / avg = 8 B
 
-# strcache performance: lookups = 48 / hit rate = 47%
+# strcache performance: lookups = 47 / hit rate = 42%
 # hash-table stats:
-# Load=25/8192=0%, Rehash=0, Collisions=3/48=6%
-# Finished Make data base on Mon Oct  7 15:32:18 2024
+# Load=27/8192=0%, Rehash=0, Collisions=3/47=6%
+# Finished Make data base on Mon Oct  7 20:19:13 2024
 
  
