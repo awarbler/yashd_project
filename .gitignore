@@ -56,3 +56,8 @@ dkms.conf
 
 # VS Code
 .vscode/
+.DS_Store
+
+# Application generated files
+*.log
+*.pid

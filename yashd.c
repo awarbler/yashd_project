@@ -13,24 +13,32 @@
 // log command to /tmp/yashd.log }
 
 
+// Troubleshooting the server
+// 1. Error binding name to stream socket: Address already in use 
+// Run: sudo lsof -i :3820
+// Run: sudo kill -9 <PID>
+
 // basic functionality for connecting to the server
 
 #include "yashd.h"
 
-extern int errno;
-
-#define PATHMAX 255
-
 /* Initialize path variables */
-static char* server_path = "/tmp/yashd";
-static char* log_path = "/tmp/yashd.log";
-static char* pid_path = "/tmp/yashd.pid";
+static char* server_path = "./tmp/yashd";
+static char* log_path = "./tmp/yashd.log";
+static char* pid_path = "./tmp/yashd.pid";
 
-/* create thread argument struct for logRequest() */
-typedef struct _thread_log_t {
-  char * request;
+/* Initialize mutex lock */
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+
+void reusePort(int sock);
+void Serve(int psd, struct sockaddr_in from);
+
+/* create thread argument struct for logRequest() thread */
+typedef struct LogRequestArgs {
+  char request[200];
   struct sockaddr_in from;
-} _thread_log_t;
+} LogRequestArgs;
 
 /**
  * @brief  If we are waiting reading from a pipe and
@@ -66,7 +74,6 @@ void daemon_init(const char * const path, uint mask)
 {
   pid_t pid;
   char buff[256];
-  static FILE *log; /* for the log */
   int fd;
   int k;
 
@@ -83,7 +90,7 @@ void daemon_init(const char * const path, uint mask)
   for (k = getdtablesize()-1; k>0; k--)
       close(k);
 
-  /* Redirecting stdin and stdout to /dev/null */
+  /* Redirecting stdin, stdout, and stdout to /dev/null */
   if ( (fd = open("/dev/null", O_RDWR)) < 0) {
     perror("Open");
     exit(0);
@@ -131,11 +138,6 @@ void daemon_init(const char * const path, uint mask)
 }
 
 
-#define MAXHOSTNAME 80
-void reusePort(int sock);
-void Serve(int psd, struct sockaddr_in from);
-
-
 int main(int argc, char **argv ) {
     int   sd, psd;
     struct   sockaddr_in server;
@@ -147,7 +149,7 @@ int main(int argc, char **argv ) {
 
     char* ThisHost = "localhost";
 
-    // initialize the daemon
+    // TO-DO: Initialize the daemon
     // daemon_init(server_path, 0);
     
     printf("----TCP/Server running at host NAME: %s\n", ThisHost);
@@ -155,7 +157,7 @@ int main(int argc, char **argv ) {
       fprintf(stderr, "Can't find host %s\n", argv[1]);
       exit(-1);
     }
-    bcopy ( hp->h_addr, &(server.sin_addr), hp->h_length);
+    bcopy( hp->h_addr, &(server.sin_addr), hp->h_length);
     printf("(TCP/Server INET ADDRESS is: %s )\n", inet_ntoa(server.sin_addr));
     
     /** Construct name of socket */
@@ -170,23 +172,23 @@ int main(int argc, char **argv ) {
     sd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP); 
     /* OR sd = socket (hp->h_addrtype,SOCK_STREAM,0); */
     if (sd<0) {
-	perror("opening stream socket");
-	exit(-1);
+	    perror("opening stream socket");
+	    exit(-1);
     }
     /** this allow the server to re-start quickly instead of waiting
-	for TIME_WAIT which can be as large as 2 minutes */
+	  for TIME_WAIT which can be as large as 2 minutes */
     reusePort(sd);
     if ( bind( sd, (struct sockaddr *) &server, sizeof(server) ) < 0 ) {
-	close(sd);
-	perror("binding name to stream socket");
-	exit(-1);
+      close(sd);
+      perror("Error binding name to stream socket");
+      exit(-1);
     }
     
-    /** get port information and  prints it out */
+    /** get port information and prints it out */
     length = sizeof(server);
     if ( getsockname (sd, (struct sockaddr *)&server,&length) ) {
-	perror("getting socket name");
-	exit(0);
+      perror("Error getting socket name");
+      exit(0);
     }
     printf("Server Port is: %d\n", ntohs(server.sin_port));
     
@@ -194,30 +196,55 @@ int main(int argc, char **argv ) {
     listen(sd,4);
     fromlen = sizeof(from);
     for(;;){
-	psd  = accept(sd, (struct sockaddr *)&from, &fromlen);
-	childpid = fork();
-	if ( childpid == 0) {
-	    close (sd);
-	    Serve(psd, from);
-	}
-	else{
-	    printf("My new child pid is %d\n", childpid);
-	    close(psd);
-	}
+      psd  = accept(sd, (struct sockaddr *)&from, &fromlen);
+      childpid = fork();
+      if ( childpid == 0) {
+          close (sd);
+          Serve(psd, from);
+      }
+      else{
+          printf("My new child pid is %d\n", childpid);
+          close(psd);
+      }
     }
+    // Destroy the mutex
+    pthread_mutex_destroy(&lock);
 }
 
-void logRequest(char *request, struct sockaddr_in from) {
+void *logRequest(void *args) {
+    LogRequestArgs *logArgs = (LogRequestArgs *)args;
+    char *request = logArgs->request;
+    struct sockaddr_in from = logArgs->from;
+
     time_t rawtime;
     struct tm *timeinfo;
     char timeString[80];
+    FILE *logFile;
 
     time(&rawtime);
     timeinfo = localtime(&rawtime);
     strftime(timeString, 80, "%b %d %H:%M:%S", timeinfo);
 
-    printf("%s yashd[%s:%d]: %s\n", timeString, inet_ntoa(from.sin_addr), ntohs(from.sin_port), request);
-    // pthread_exit(NULL);
+    pthread_mutex_lock(&lock); // wrap CS in lock ...
+    
+    printf("Opening log file at path: %s\n", log_path);
+    
+    logFile = fopen(log_path, "a");
+    if (logFile == NULL) {
+        perror("Error opening log file");
+        pthread_mutex_unlock(&lock); // Unlock the mutex before returning
+        return NULL;
+    }
+
+    // Debugging statement to check if writing to the file
+    printf("Writing to log file: %s\n", request);
+
+
+    fprintf(logFile,"%s yashd[%s:%d]: %s", timeString, inet_ntoa(from.sin_addr), ntohs(from.sin_port), request);
+    fclose(logFile);
+    pthread_mutex_unlock(&lock); // ... unlock
+    
+    pthread_exit(NULL);
  }
 
 void Serve(int psd, struct sockaddr_in from) {
@@ -225,12 +252,9 @@ void Serve(int psd, struct sockaddr_in from) {
     int rc;
     struct  hostent *hp;
     pthread_t p;
-
-    
-    // *gethostbyname();
     
     // printf("Serving %s:%d\n", inet_ntoa(from.sin_addr),
-	//    ntohs(from.sin_port));
+	  // ntohs(from.sin_port));
  
     if ((hp = gethostbyaddr((char *)&from.sin_addr.s_addr, sizeof(from.sin_addr.s_addr),AF_INET)) == NULL)
 	    fprintf(stderr, "Can't find host %s\n", inet_ntoa(from.sin_addr));
@@ -246,20 +270,39 @@ void Serve(int psd, struct sockaddr_in from) {
         }
         if (rc > 0){ // if there is data to read
             buf[rc]='\0';
-            // pthread_create(&p, NULL, logRequest, (void *) argin); // passing an int but create expects void* so cast it
-            // pthread_join(p, (void **) &m); 
-            logRequest(buf, from); 
-            if (send(psd, buf, rc, 0) <0 )
-            perror("sending stream message");
+
+            // Allocate memory for LogRequestArgs
+            LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
+            if (args == NULL) {
+            perror("Error allocating memory for log request");
+            continue;
+            }
+            
+            printf("1. command: %s", buf);
+            // Copy the request and client information to the struct
+            strncpy(args->request, buf, sizeof(args->request) - 1);
+            // args->request[sizeof(args->request) - 1] = '\0'; // Ensure null-termination
+            args->from = from;
+
+            // Create a new thread for logging
+            if (pthread_create(&p, NULL, logRequest, (void *)args) != 0) {
+              perror("Error creating log request thread");
+              free(args); // Free the allocated memory if thread creation fails
+            } else {
+              pthread_detach(p); // Detach the thread to allow it to run independently
+            }
+            
+            // TO-DO: Handle the command from the client
         }
         else { // connection closed by client 
-            printf("TCP/Client: %s:%d\n", inet_ntoa(from.sin_addr),
-            ntohs(from.sin_port));
-            printf("(Name is : %s)\n", hp->h_name);
-            printf("Disconnected..\n");
-            close (psd);
-            exit(0);
+          printf("TCP/Client: %s:%d\n", inet_ntoa(from.sin_addr),
+          ntohs(from.sin_port));
+          printf("(Name is : %s)\n", hp->h_name);
+          printf("Disconnected..\n");
+          close (psd);
+          exit(0);
         }
+        printf("\n...another round...\n");
     }
 }
 
