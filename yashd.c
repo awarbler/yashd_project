@@ -282,11 +282,16 @@ void* serveClient(void *args) {
             buf[rc]='\0';
             printf("Server received command: %s\n", buf);// debugging output 
 
+            // remove the cmd prefix from the command before processing 
+            if (strncmp(buf, "cmd ", 4) == 0) {
+              memmove(buf, buf + 4, strlen(buf) -3); // shift the buffer to remove cmd 
+            }
+
             // Allocate memory for LogRequestArgs
             LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
             if (args == NULL) {
-            perror("Error allocating memory for log request");
-            continue;
+              perror("Error allocating memory for log request");
+              continue;
             }
             
             // Copy the request and client information to the struct
@@ -304,6 +309,39 @@ void* serveClient(void *args) {
             
             // TO-DO: Handle the command from the client
             printf("Handling client command: %s\n", buf);
+
+            int pid = fork(); // Create a new process to execut the command 
+
+            if (pid == 0) { // Child process
+              // Redirect stdout and stderr to the client socket
+              dup2(psd, STDOUT_FILENO);
+              dup2(psd, STDERR_FILENO);
+              close(psd); // Close the socket descriptor
+
+              // flush stdout and stderr to ensure the oput is sent to the client immediately 
+              fflush(stdout);
+              fflush(stderr);
+
+              // split the received command into argument using strtok() 
+              char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
+              cmd_args[0] = strtok(buf, " \n");
+              int i = 1;
+              while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)
+              {
+                /* code */
+                i++;
+              }
+              cmd_args[i] = NULL; // NULL terminate the array for execvp
+              // executing the command execvp that we used in yash shell
+              if (execvp(cmd_args[0], cmd_args) < 0) { 
+                perror("Execute failed");
+              }
+              exit(0); // child process should exit after executing 
+
+            } else if (pid > 0) { // parent process 
+              wait(NULL); // wait for child process to finish 
+            }
+
             if (send(psd, buf, rc, 0) <0 )
 		          perror("sending stream message");
         }

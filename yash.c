@@ -144,7 +144,7 @@ int main(int argc, char *argv[]){
         // remove the newline character from the input 
         command[strcspn(command, "\n")]  = 0;
 
-        // check if hte command is a file redirecton command cat>file.txt
+        // check if the command is a file redirecton command cat>file.txt
         if (strstr(command, ">") != NULL) {
             send_command_to_server(command); // send command to the server
             printf("Enter plain text (CTRL-D to end): \n");
