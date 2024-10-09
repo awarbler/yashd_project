@@ -43,7 +43,7 @@ void send_command_to_server(const char *command) {
     // debuggin output: check what is being sent
     printf("client sending command: %s\n", command);
     // Format the message to be sent to the server 
-    snprintf(message, sizeof(message), "cmd %s\n", command);
+    snprintf(message, sizeof(message), "CMD %s\n", command);
 
     // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
@@ -122,13 +122,13 @@ int main(int argc, char *argv[]){
     signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
     printf("Connected to server at %s:%d\n", argv[1], PORT);
+    printf("# "); // display prompt
 
     // main loop to send commands and receive responses
     while (1)
     {
         /* code */
         char command[BUFFER_SIZE] = {0}; // buffer for user input 
-        printf("# "); // display prompt 
 
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
