@@ -13,8 +13,8 @@ all: $(TARGETS) # BUILD BOTH YASHD AND YASH executables
 
 
 # RULE to build the server executable(yashd)
-yashd: yashd.o
-	$(CC) $(CFLAGS) yashd.o -o yashd
+yashd: yashd.o 
+	$(CC) $(CFLAGS) yashd.o -o yashd 
 # compile and link the yashd object file to create the executable yashd
 
 # Rule to buile the client executable (yash)
@@ -35,9 +35,10 @@ yashd.o: yashd.c yashd.h
 yash.o: yash.c yashd.h 
 	$(CC) $(CFLAGS) -c yash.c -o yash.o 
 
+
 # clean up rule to remove compiled object files and executables 
 clean:
 	@echo "cleaning up object files and executables....."
-	rm -f *.o yashd yash mock_server test_yash
+	rm -f *.o yashd yash mock_server test_yash pipes
 
 

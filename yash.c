@@ -42,7 +42,6 @@ void send_command_to_server(const char *command) {
 
     // debuggin output: check what is being sent
     printf("client sending command: %s\n", command);
-
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "CMD %s\n", command);
 
@@ -60,6 +59,7 @@ void send_command_to_server(const char *command) {
     if (valread < 0) {
         perror("Error receiving response");
     } else if (valread > 0) {
+        printf("%s", buf); // print the servers response
         printf("Client received: %s", buf); // print the servers response
     }
 }
@@ -79,7 +79,7 @@ void handle_plain_text() {
     }
     // end of input to the server by closing the connection 
     shutdown(sockfd, SHUT_WR); // close write channel 
-    
+
 }
 
 
@@ -154,10 +154,10 @@ int main(int argc, char *argv[]){
             send_command_to_server(command);
 
         }
-        
+
     }
     // close the socket 
-    
+
     printf("yash client running....\n");
     close(sockfd);
     return 0;
