@@ -296,6 +296,8 @@ void* serveClient(void *args) {
         buffer[bytesRead] = '\0'; // null terminate the received buffer
         printf("%s",buffer); // print the received buffer for debugging
 
+        // handle control message (ctl char)
+
 
         // Handle: CMD<blank><Command_String>\n
         if (strncmp(buffer, "CMD ", 4) == 0) {
@@ -325,13 +327,13 @@ void* serveClient(void *args) {
           }
 
           // Create pipes for communication between parent and child
-            if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
+          if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
               perror("Pipe creation failed");
               close(psd);
               free(clientArgs);
               pthread_exit(NULL);
               //exit(EXIT_FAILURE);
-            }
+          }
 
           // Fork a child process to execute the command
           pid = fork ();
@@ -346,7 +348,7 @@ void* serveClient(void *args) {
             close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
             
             dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
-            dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+            //dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
             dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
             
             close(pipefd_stdout[1]);
@@ -357,6 +359,7 @@ void* serveClient(void *args) {
             // tokenize the command string into arguments
             char *args[10];
             int i = 0;
+
             args[i] = strtok(command, " ");
             while (args[i] != NULL && i < 9) {
               i++;
@@ -381,7 +384,7 @@ void* serveClient(void *args) {
 
             // Read the child's output from the pipe and send it to the client socket
             while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer) - 1)) > 0) {
-              
+
               buffer[bytesRead] = '\0';
               send(psd, buffer, bytesRead, 0);
             }
@@ -401,32 +404,39 @@ void* serveClient(void *args) {
           
           
         } else if (strncmp(buffer, "CTL ", 4) == 0) { 
+          
           // Handle: CTL<blank><char[c|z|d]>\n
-          //char controlChar = buffer[4];
-          if (commandRunning) {
-            // Send SIGINT
-            char controlChar = buffer[4];
-            if (controlChar == 'c') {
+          char controlChar = buffer[4];
+          
+          if (controlChar == 'd') {
+            // Send EOF signal
+            printf("caught ctrl-d\n");
+
+            // Close the write end of the pipe to signal EOF to the child process
+            close(pipefd_stdin[1]);
+            shutdown(psd, SHUT_RDWR);
+            close(psd);
+            pthread_exit(NULL);
+
+          } else if (controlChar == 'c') {
+            // hanlde ctrl c SIGINT
               printf("caught ctrl-c\n");
               kill(pid, SIGINT); // send sigint to the child proecess added 523 100924
-            } else if (controlChar) {
+
+            } else if (controlChar == 'z') {
               // Send SIGTSTP
               printf("caught ctrl-z\n");
               kill(pid, SIGTSTP); // send sigtstpto the child proecess added 523 100924
-              } else if (controlChar == 'd') {
-                // Send EOF signal
-                printf("caught ctrl-d\n");
-                // Close the write end of the pipe to signal EOF to the child process
-                close(pipefd_stdin[1]);
-              }
-            } else {
+
+            } 
+             else {
               // If no command is running, send an error message
               const char *errorMsg = "Error: No command is currently running.\n# ";
               send(psd, errorMsg, strlen(errorMsg), 0);
+            }
           }
-        }
-    }
-    pthread_exit(NULL);
+          pthread_exit(NULL);
+          }
 }
 
 void reusePort(int s)

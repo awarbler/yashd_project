@@ -62,8 +62,9 @@ void send_command_to_server(const char *command) {
         buf[valread] = '\0'; // ensures null terminated staring 
         printf("%s", buf); // print the servers response
         fflush(stdout);
+
         // break the lop when the server sends the prompt #
-        if (strstr(buf, "# ") != NULL) {
+        if (strstr(buf, "\n# ") != NULL) {
             break;
         }
     }
@@ -91,6 +92,7 @@ void handle_plain_text() {
         }
     }
     // end of input to the server by closing the connection 
+    send(sockfd, "CTL d\n", 6, 0);
     shutdown(sockfd, SHUT_WR); // close write channel 
     printf("End of plain text input(Ctrl+D detected.)\n");
 
@@ -110,7 +112,7 @@ int main(int argc, char *argv[]){
     }
 
     // create a sockt for communication ipv4, tcp 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <0) {
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Socket creation failed");
         return EXIT_FAILURE;
     }
@@ -142,12 +144,22 @@ int main(int argc, char *argv[]){
     {
         /* code */
         char command[BUFFER_SIZE] = {0}; // buffer for user input 
-        printf("# "); // display prompt 
+        
 
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
+
             if (feof(stdin)) {
                 printf("Client terminating....\n");
+
+                if (send(sockfd, "CTL d\n", 6, 0) < 0 ) {
+                    perror("Failed to send ctl d to server");
+                } else {
+                    printf("Sent CTL d to server sucessfully.\n");
+                }
+                // inform server of EOF
+                
+                shutdown(sockfd, SHUT_WR);
                 break; // exit on eof ctrl d 
             } else {
                 perror("error reading command");
