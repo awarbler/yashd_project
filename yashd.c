@@ -190,6 +190,7 @@ int main(int argc, char **argv ) {
       ClientArgs *clientArgs = malloc(sizeof(ClientArgs));
       if (clientArgs == NULL) {
           perror("Error allocating memory for client arguments");
+          free(clientArgs);
           close(psd);
           continue;
       }
@@ -246,9 +247,11 @@ void *logRequest(void *args) {
     printf("Writing to log file: %s\n", request);
 
 
-    fprintf(logFile,"%s yashd[%s:%d]: %s", timeString, inet_ntoa(from.sin_addr), ntohs(from.sin_port), request);
+    fprintf(logFile,"%s yashd[%s:%d]: %s\n", timeString, inet_ntoa(from.sin_addr), ntohs(from.sin_port), request);
+    fflush(logFile);
     fclose(logFile);
     pthread_mutex_unlock(&lock); // ... unlock
+    free(args); // free memory allocated for logging 
 
     pthread_exit(NULL);
  }
@@ -257,99 +260,171 @@ void* serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
     struct sockaddr_in from = clientArgs->from;
-    char buf[512];
-    int rc;
-    struct  hostent *hp;
+    char buffer[512]; // Maybe 205 as the command can only have 200 characters
+    int bytesRead;
+    int pipefd_stdout[2], pipefd_stdin[2];
     pthread_t p;
-
-
-    if ((hp = gethostbyaddr((char *)&from.sin_addr.s_addr, sizeof(from.sin_addr.s_addr),AF_INET)) == NULL)
-	    fprintf(stderr, "Can't find host %s\n", inet_ntoa(from.sin_addr));
-    else
-	    printf("(Name is : %s)\n", hp->h_name);
-
+    pid_t pid;
+    int commandRunning = 0;
+        
     /**  get data from  client and send it back */
     for(;;){ // infinite loop to keep the server running
         printf("\n...server is waiting...\n");
-        if( (rc=recv(psd, buf, sizeof(buf), 0)) < 0){ // read data from the client
-            perror("receiving stream  message");
-            exit(-1);
+
+        bytesRead = recv(psd, buffer, sizeof(buffer) - 1 , 0); // read data from teh client using recv
+
+        // check if the client has closed the connect EOF received
+
+        if (bytesRead == 0){ 
+          // read data from the client
+          printf("Client disconnected EOF rec.\n");
+          close(psd);
+          free(clientArgs);
+          pthread_exit(NULL);
+          //perror("Error receiving stream message");
+          //exit(-1);
         }
 
-        printf("Received: %s\n", buf);
+        if (bytesRead < 0){ 
+          // read data from the client
+          printf("Error receiving stream message.\n");
+          close(psd);
+          free(clientArgs);
+          pthread_exit(NULL);
+        }
+        
+        buffer[bytesRead] = '\0'; // null terminate the received buffer
+        printf("%s",buffer); // print the received buffer for debugging
 
-        if (rc > 0){ // if there is data to read
-            buf[rc]='\0';
-            printf("Server received command: %s\n", buf);// debugging output 
 
-            // remove the cmd prefix from the command before processing 
-            if (strncmp(buf, "cmd ", 4) == 0) {
-              memmove(buf, buf + 4, strlen(buf) -3); // shift the buffer to remove cmd 
-            }
-            // Allocate memory for LogRequestArgs
-            LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
-            if (args == NULL) {
+        // Handle: CMD<blank><Command_String>\n
+        if (strncmp(buffer, "CMD ", 4) == 0) {
+          // Extract the command string
+          char *command = buffer + 4;
+          command[strcspn(command, "\n")] = '\0'; // Remove the newline character
+
+          printf("Command: %s-%s\n", buffer, command);
+
+          // Allocate memory for LogRequestArgs
+          LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
+          if (args == NULL) {
             perror("Error allocating memory for log request");
             continue;
-              perror("Error allocating memory for log request");
-              continue;
+          }
+          
+          // Copy the request and client information to the struct
+          strncpy(args->request, command, sizeof(args->request) - 1);
+          args->from = from;
+
+          // Create a new thread for logging
+          if (pthread_create(&p, NULL, logRequest, (void *)args) != 0) {
+            perror("Error creating log request thread");
+            free(args); // Free the allocated memory if thread creation fails
+          } else {
+            pthread_detach(p); // Detach the thread to allow it to run independently
+          }
+
+          // Create pipes for communication between parent and child
+            if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
+              perror("Pipe creation failed");
+              close(psd);
+              free(clientArgs);
+              pthread_exit(NULL);
+              //exit(EXIT_FAILURE);
             }
 
-            // Copy the request and client information to the struct
-            // Copy the request and client information to the struct
-            strncpy(args->request, buf, sizeof(args->request) - 1);
-            // args->request[sizeof(args->request) - 1] = '\0'; // Ensure null-termination
-            args->from = from;
+          // Fork a child process to execute the command
+          pid = fork ();
+          if (pid  == -1) {
+              perror("fork failed");
+              exit(EXIT_FAILURE);
+          }
 
-            // Create a new thread for logging
-            if (pthread_create(&p, NULL, logRequest, (void *)args) != 0) {
-              perror("Error creating log request thread");
-              free(args); // Free the allocated memory if thread creation fails
+          if (pid == 0) {
+            // Child process
+            close(pipefd_stdout[0]); // Close the read end of the stdout pipe
+            close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
+            
+            dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+            dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+            dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+            
+            close(pipefd_stdout[1]);
+            close(pipefd_stdin[0]);
+
+
+            //printf("\n# "); // Send # to indicate the end of the command output
+            // tokenize the command string into arguments
+            char *args[10];
+            int i = 0;
+            args[i] = strtok(command, " ");
+            while (args[i] != NULL && i < 9) {
+              i++;
+              args[i] = strtok(NULL, " ");
+            }
+
+            args[i] = NULL;
+
+            // Execute the command
+            // would only work with one word commands: ls, wc, date, etc.
+            if (execvp(args[0], args) == -1) {
+              perror("Execvp failed");
+              exit(EXIT_FAILURE);
+            }
+            //exit(EXIT_SUCCESS);
+          } else {
+            // Parent process
+            close(pipefd_stdout[1]); // Close the write end of the stdout pipe
+            close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
+
+            commandRunning = 1; // indicate that a command is running
+
+            // Read the child's output from the pipe and send it to the client socket
+            while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer) - 1)) > 0) {
+              
+              buffer[bytesRead] = '\0';
+              send(psd, buffer, bytesRead, 0);
+            }
+
+            close(pipefd_stdout[0]);
+            // Wait for the child process to finish
+            waitpid(pid, NULL, 0);
+
+            commandRunning = 0;
+            send(psd, "\n# ", 3 ,0);  
+          }
+
+          // Send # to indicate the end of the command output
+          //if (send(psd, "\n#", sizeof("\n#"), 0) <0 ) {
+           // perror("sending stream message");
+          //}
+          
+          
+        } else if (strncmp(buffer, "CTL ", 4) == 0) { 
+          // Handle: CTL<blank><char[c|z|d]>\n
+          //char controlChar = buffer[4];
+          if (commandRunning) {
+            // Send SIGINT
+            char controlChar = buffer[4];
+            if (controlChar == 'c') {
+              printf("caught ctrl-c\n");
+              kill(pid, SIGINT); // send sigint to the child proecess added 523 100924
+            } else if (controlChar) {
+              // Send SIGTSTP
+              printf("caught ctrl-z\n");
+              kill(pid, SIGTSTP); // send sigtstpto the child proecess added 523 100924
+              } else if (controlChar == 'd') {
+                // Send EOF signal
+                printf("caught ctrl-d\n");
+                // Close the write end of the pipe to signal EOF to the child process
+                close(pipefd_stdin[1]);
+              }
             } else {
-              pthread_detach(p); // Detach the thread to allow it to run independently
-            }
-
-            // TO-DO: Handle the command from the client
-            printf("Handling client command: %s\n", buf);
-
-            // TO-DO: Handle the command from the client
-            printf("Handling client command: %s\n", buf);
-            int pid = fork(); // Create a new process to execut the command 
-            if (pid == 0) { // Child process
-              // Redirect stdout and stderr to the client socket
-              dup2(psd, STDOUT_FILENO);
-              dup2(psd, STDERR_FILENO);
-              close(psd); // Close the socket descriptor
-              // flush stdout and stderr to ensure the oput is sent to the client immediately 
-              fflush(stdout);
-              fflush(stderr);
-              // split the received command into argument using strtok() 
-              char *cmd_args[10]; // used cmd_args instead of args to avoid conflict 
-              cmd_args[0] = strtok(buf, " \n");
-              int i = 1;
-              while ((cmd_args[i] = strtok(NULL, " \n")) != NULL)
-              {
-                /* code */
-                i++;
-              }
-              cmd_args[i] = NULL; // NULL terminate the array for execvp
-              // executing the command execvp that we used in yash shell
-              if (execvp(cmd_args[0], cmd_args) < 0) { 
-                perror("Execute failed");
-              }
-              exit(0); // child process should exit after executing 
-            } else if (pid > 0) { // parent process 
-              wait(NULL); // wait for child process to finish 
-            }
-            if (send(psd, buf, rc, 0) <0 )
-		          perror("sending stream message");
+              // If no command is running, send an error message
+              const char *errorMsg = "Error: No command is currently running.\n# ";
+              send(psd, errorMsg, strlen(errorMsg), 0);
+          }
         }
-        else { // connection closed by client 
-          close(psd);
-          // exit(0);
-          pthread_exit(0);
-        }
-        printf("\n...another round...\n");
     }
     pthread_exit(NULL);
 }
@@ -359,7 +434,7 @@ void reusePort(int s)
     int one=1;
 
     if ( setsockopt(s,SOL_SOCKET,SO_REUSEADDR,(char *) &one,sizeof(one)) == -1 )
-	{
+	{ 
 	    printf("error in setsockopt,SO_REUSEPORT \n");
 	    exit(-1);
 	}

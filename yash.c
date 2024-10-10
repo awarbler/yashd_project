@@ -33,20 +33,21 @@ void sig_handler(int signo) {
     if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
-    printf("Control signal sent to server. \n");
+    printf(" Control signal sent to server. \n");
 }
 
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
+    int valread;
 
     // debuggin output: check what is being sent
     printf("client sending command: %s\n", command);
     // Format the message to be sent to the server 
-    snprintf(message, sizeof(message), "cmd %s\n", command);
+    snprintf(message, sizeof(message), "CMD %s\n", command);
 
     // Send the command to the server
-    if (send(sockfd, message, strlen(message), 0) <0) {
+    if (send(sockfd, message, strlen(message), 0) < 0) {
         perror("Failed to send command");
         return;
     }
@@ -55,13 +56,25 @@ void send_command_to_server(const char *command) {
     char buf[BUFFER_SIZE] = {0};
 
     // rec response from server 
-    int valread = recv(sockfd, buf, BUFFER_SIZE, 0);
+    while ((valread = recv(sockfd, buf, BUFFER_SIZE -1 , 0)) > 0)
+    {
+        /* code */
+        buf[valread] = '\0'; // ensures null terminated staring 
+        printf("%s", buf); // print the servers response
+        fflush(stdout);
+        // break the lop when the server sends the prompt #
+        if (strstr(buf, "# ") != NULL) {
+            break;
+        }
+    }
+
+    //int valread = recv(sockfd, buf, BUFFER_SIZE, 0);
     if (valread < 0) {
         perror("Error receiving response");
-    } else if (valread > 0) {
-        printf("%s", buf); // print the servers response
-        printf("Client received: %s", buf); // print the servers response
-    }
+    } //else if (valread > 0) {
+        //printf("%s", buf); // print the servers response
+        //printf("Client received: %s", buf); // print the servers response
+    //}
 }
 
 // handle plain text input after issuing commands like cat 
@@ -79,6 +92,7 @@ void handle_plain_text() {
     }
     // end of input to the server by closing the connection 
     shutdown(sockfd, SHUT_WR); // close write channel 
+    printf("End of plain text input(Ctrl+D detected.)\n");
 
 }
 
