@@ -137,7 +137,7 @@ int main(int argc, char **argv ) {
     struct sockaddr_in from;
     int fromlen;
     int length;
-    int childpid;
+    //int childpid;
 
     // TO-DO: Initialize the daemon
     // daemon_init(server_path, 0);
@@ -264,9 +264,12 @@ void* serveClient(void *args) {
     int bytesRead;
     int pipefd_stdout[2], pipefd_stdin[2];
     pthread_t p;
-    pid_t pid;
+    pid_t pid = -1;
     int commandRunning = 0;
-        
+
+    // send initial prompt to the client 
+    send(psd, "# ", 2, 0);
+
     /**  get data from  client and send it back */
     for(;;){ // infinite loop to keep the server running
         printf("\n...server is waiting...\n");
@@ -284,6 +287,7 @@ void* serveClient(void *args) {
           //perror("Error receiving stream message");
           //exit(-1);
         }
+        printf("%s",buffer); // print the received buffer for debugging
 
         if (bytesRead < 0){ 
           // read data from the client
@@ -407,6 +411,7 @@ void* serveClient(void *args) {
           
           // Handle: CTL<blank><char[c|z|d]>\n
           char controlChar = buffer[4];
+          printf("Caught Control ");
           
           if (controlChar == 'd') {
             // Send EOF signal

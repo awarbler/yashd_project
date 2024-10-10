@@ -133,11 +133,26 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
+    printf("Connected to server at %s:%d\n", argv[1], PORT);
+
+    // Receive the initial prompt from the server
+    char prompt[BUFFER_SIZE] = {0};
+
+    int valread = recv(sockfd, prompt, BUFFER_SIZE -1 , 0);
+    if (valread > 0) { 
+        prompt[valread] = '\0'; // null terminate the prompt string 
+        printf("%s", prompt); // print the initial prompt received from server
+    } else {
+        perror("Error rec initial prompt");
+        return EXIT_FAILURE;
+    }
+
+
     // set up signal handlers for ctrl c and ctrl z 
     signal(SIGINT, sig_handler); // catch ctrl c sigint
     signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
-    printf("Connected to server at %s:%d\n", argv[1], PORT);
+    
 
     // main loop to send commands and receive responses
     while (1)
