@@ -13,6 +13,8 @@ static char* server_path = "./tmp/yashd";
 static char* log_path = "./tmp/yashd.log";
 static char* pid_path = "./tmp/yashd.pid";
 
+int BUFFER_SIZE = 1024;
+
 /* Initialize mutex lock */
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -252,20 +254,35 @@ void *logRequest(void *args) {
     pthread_exit(NULL);
  }
 
+
+void cleanup(char *buf)
+{
+    int i;
+    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
+}
+
 void* serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
     struct sockaddr_in from = clientArgs->from;
-    char buffer[512]; // Maybe 205 as the command can only have 200 characters
+    char buffer[BUFFER_SIZE]; // Maybe 205 as the command can only have 200 characters
     int bytesRead;
     int pipefd_stdout[2], pipefd_stdin[2];
     pthread_t p;
     pid_t pid;
     int commandRunning = 0;
+
+    // Send initial prompt to the client
+    if (send(psd, "\n# ", sizeof("\n# "), 0) <0 ){
+      perror("sending stream message");
+    }
         
     /**  get data from  client and send it back */
     for(;;){ // infinite loop to keep the server running
         // printf("\n...server is waiting...\n");
+
+        cleanup(buffer); // clear the buffer
+
         if( (bytesRead=recv(psd, buffer, sizeof(buffer), 0)) < 0){ // read data from the client
             perror("Error receiving stream message");
             exit(-1);
@@ -325,29 +342,38 @@ void* serveClient(void *args) {
             // Execute the command
             // would only work with one word commands: ls, wc, date, etc.
             execvp(command, &command);
-            printf("\n#"); // Send # to indicate the end of the command output
+            // printf("after command\n# "); // Send # to indicate the end of the command output
 
             exit(EXIT_SUCCESS);
           } else {
+            
+            
             // Parent process
             close(pipefd_stdout[1]); // Close the write end of the stdout pipe
             close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
             commandRunning = 1;
 
+            // Wait for the child process to finish
+            waitpid(pid, NULL, 0);
+
             // Read the child's output from the pipe and send it to the client socket
             while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer))) > 0) {
                 send(psd, buffer, bytesRead, 0);
             }
+
+            if (send(psd, "\n# ", sizeof("\n# "), 0) <0 ){
+            perror("sending stream message");
+            }
+
             close(pipefd_stdout[0]);
 
-            // Wait for the child process to finish
-            waitpid(pid, NULL, 0);
             commandRunning = 0;
           }
 
-          // Send # to indicate the end of the command output
-          if (send(psd, "\n#", sizeof("\n#"), 0) <0 )
-		        perror("sending stream message");
+          // // Send # to indicate the end of the command output
+          // if (send(psd, "\n# ", sizeof("\n# "), 0) <0 ){
+          //   perror("sending stream message");
+          // }
           
         } else if (strncmp(buffer, "CTL ", 4) == 0) { 
           // Handle: CTL<blank><char[c|z|d]>\n
@@ -365,6 +391,7 @@ void* serveClient(void *args) {
             printf("caught ctrl-d\n");
             // Close the write end of the pipe to signal EOF to the child process
             close(pipefd_stdin[1]);
+            commandRunning = 0;
           }
         } else {
           // Handle plain text input
