@@ -181,6 +181,7 @@ int main(int argc, char **argv ) {
     fromlen = sizeof(from);
     printf("Server is ready to receive\n");
     for(;;){
+      printf("Server is waiting\n");
       psd  = accept(sd, (struct sockaddr *)&from, &fromlen);
       if (psd < 0) {
         perror("accepting connection");
@@ -284,7 +285,8 @@ void* serveClient(void *args) {
         cleanup(buffer); // clear the buffer
 
         if( (bytesRead=recv(psd, buffer, sizeof(buffer), 0)) < 0){ // read data from the client
-            perror("Error receiving stream message");
+            // perror("Error receiving stream message");
+            printf("closed connection with %d\n", psd);
             close(psd);
             pthread_exit(NULL);
             // printf("closed connection with %d", psd);

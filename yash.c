@@ -11,7 +11,6 @@
 // Step 1 Include necessary headers and global variables from book
 #include "yashd.h"
 
-
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
 
@@ -49,9 +48,15 @@ void sig_handler(int signo) {
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
 
+    pthread_mutex_lock(&lock); // wrap CS in lock ...
+    promptMode = 0;
+    pthread_mutex_unlock(&lock); // ... unlock
+
     printf("before send command: %d\n", promptMode); // display prompt
     fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
+
+    cleanup(message); // clear the buffer
 
     // debuggin output: check what is being sent
     // printf("client sending command: %s\n", command);
@@ -64,10 +69,6 @@ void send_command_to_server(const char *command) {
         perror("Failed to send command");
         return;
     }
-
-    pthread_mutex_lock(&lock); // wrap CS in lock ...
-    promptMode = 0;
-    pthread_mutex_unlock(&lock); // ... unlock
 
     printf("after send command: %d\n", promptMode); // display prompt
     fflush(stdout);
@@ -85,21 +86,26 @@ void* commmunication_thread(void *args){
         // read response from the server
         int bytesRead = recv(sockfd, buf, BUFFER_SIZE, 0);
         if (bytesRead < 0) {
-            perror("Error receiving response");
+            perror("Error receiving response from server");
         } else if (bytesRead > 0) {
-            if (strcmp(buf, "\n# ") ==0) {
+            if (strcmp(buf, "\n# ") == 0) {
+                // server sent prompt
                 pthread_mutex_lock(&lock); // wrap CS in lock ...
                 promptMode = 1;
                 pthread_mutex_unlock(&lock); // ... unlock
-                // printf("%s", buf); // print the servers response
+                printf("switched promptMode: %d\n", promptMode);
+                fflush(stdout);
             }
             printf("%s", buf); // print the servers response
+            fflush(stdout);
+            printf("5promptMode: %d\n", promptMode);
             fflush(stdout);
         } else {
             // server has closed the connection
             printf("Server closed the connection\n");
-            kill(getppid(), SIGTERM); // kill the parent process
-            break;
+            close(sockfd);
+            exit(EXIT_FAILURE); // Exit the entire program
+            // break;
         }
     }
     pthread_exit(NULL);
@@ -145,15 +151,14 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
-    // set up signal handlers for ctrl c and ctrl z 
-    signal(SIGINT, sig_handler); // catch ctrl c sigint
-    signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
-    signal(SIGTERM, SIG_DFL);
-
     if ((threadStatus = pthread_create(&thread, NULL, commmunication_thread, (void *)NULL))) {
       fprintf(stderr, "error: pthread_create, rc: %d\n", threadStatus);
       return EXIT_FAILURE;
     }
+
+    // set up signal handlers for ctrl c and ctrl z 
+    signal(SIGINT, sig_handler); // catch ctrl c sigint
+    signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
     printf("Connected to server at %s:%d\n", argv[1], PORT);
     // printf("# "); // display prompt
@@ -165,20 +170,20 @@ int main(int argc, char *argv[]){
     while (1) {
         cleanup(command); // clear the 
         
-        printf("promptMode: %d\n", promptMode);
+        printf("1promptMode: %d\n", promptMode);
         fflush(stdout);
 
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
             if (feof(stdin)) {
+                pthread_mutex_lock(&lock); // wrap CS in lock ...
                 if(promptMode){
                     printf("Client terminating....\n");
-                    close(sockfd);
-                    pthread_kill(thread, SIGTERM);
                     break;
                 }
+                pthread_mutex_unlock(&lock); // ... unlock
 
-                printf("%s", command);
+                printf("10. command:%s\n", command);
 
                 if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
                     perror("Failed to send control-d signal");
@@ -204,14 +209,14 @@ int main(int argc, char *argv[]){
         //     // Use the function Send_command_to_server 
         //     send_command_to_server(command);
 
-        printf("promptMode: %d\n", promptMode);
+        printf("2promptMode: %d\n", promptMode);
 
         fflush(stdout);
 
 
         send_command_to_server(command);
 
-        
+        printf("3promptMode: %d\n", promptMode);
         fflush(stdout);
 
         // }
@@ -219,6 +224,8 @@ int main(int argc, char *argv[]){
     }
     // close the socket 
     // pthread_join(thread, NULL);
+    pthread_cancel(thread);
+    pthread_join(thread, NULL);
     
     printf("yash client terminated.\n");
     close(sockfd);
