@@ -285,7 +285,9 @@ void* serveClient(void *args) {
 
         if( (bytesRead=recv(psd, buffer, sizeof(buffer), 0)) < 0){ // read data from the client
             perror("Error receiving stream message");
-            exit(-1);
+            close(psd);
+            pthread_exit(NULL);
+            // printf("closed connection with %d", psd);
         }
 
         printf("%s",buffer);

@@ -21,6 +21,14 @@ int clientAlive = 1;
 
 int sockfd = 0; // declare globally to use in signal handler
 
+/* Initialize mutex lock */
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void cleanup(char *buf)
+{
+    int i;
+    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
+}
 
 // Signal handler to manage ctrl c and ctrl z signals 
 void sig_handler(int signo) {
@@ -40,6 +48,9 @@ void sig_handler(int signo) {
 
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
+
+    printf("before send command: %d\n", promptMode); // display prompt
+    fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
     // debuggin output: check what is being sent
@@ -53,24 +64,13 @@ void send_command_to_server(const char *command) {
         perror("Failed to send command");
         return;
     }
-}
 
-// handle plain text input after issuing commands like cat 
-void handle_plain_text() {
-    char line[BUFFER_SIZE] = {0};
+    pthread_mutex_lock(&lock); // wrap CS in lock ...
+    promptMode = 0;
+    pthread_mutex_unlock(&lock); // ... unlock
 
-    // the user can input multiple lines of text until the type eof (ctrl-d)
-    while (fgets(line, sizeof(line), stdin))
-    {
-        /* code */
-        if (send(sockfd, line, strlen(line), 0) < 0) {
-            perror("Failed to send text to the server");
-            break;
-        }
-    }
-    // end of input to the server by closing the connection 
-    shutdown(sockfd, SHUT_WR); // close write channel 
-    
+    printf("after send command: %d\n", promptMode); // display prompt
+    fflush(stdout);
 }
 
 // Communication thread to handle communication with the server
@@ -78,14 +78,19 @@ void* commmunication_thread(void *args){
     // buffer for receiving response
     char buf[BUFFER_SIZE] = {0};
 
-    while(clientAlive) {
+    while(1) {
+
+        cleanup(buf); // clear the buffer
+
         // read response from the server
         int bytesRead = recv(sockfd, buf, BUFFER_SIZE, 0);
         if (bytesRead < 0) {
             perror("Error receiving response");
         } else if (bytesRead > 0) {
             if (strcmp(buf, "\n# ") ==0) {
+                pthread_mutex_lock(&lock); // wrap CS in lock ...
                 promptMode = 1;
+                pthread_mutex_unlock(&lock); // ... unlock
                 // printf("%s", buf); // print the servers response
             }
             printf("%s", buf); // print the servers response
@@ -93,18 +98,14 @@ void* commmunication_thread(void *args){
         } else {
             // server has closed the connection
             printf("Server closed the connection\n");
-            // kill(getppid(), SIGINT); // kill the parent process
+            kill(getppid(), SIGTERM); // kill the parent process
             break;
         }
     }
     pthread_exit(NULL);
 }
 
-void cleanup(char *buf)
-{
-    int i;
-    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
-}
+
 
 
 #ifndef TESTING
@@ -147,6 +148,7 @@ int main(int argc, char *argv[]){
     // set up signal handlers for ctrl c and ctrl z 
     signal(SIGINT, sig_handler); // catch ctrl c sigint
     signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
+    signal(SIGTERM, SIG_DFL);
 
     if ((threadStatus = pthread_create(&thread, NULL, commmunication_thread, (void *)NULL))) {
       fprintf(stderr, "error: pthread_create, rc: %d\n", threadStatus);
@@ -161,17 +163,23 @@ int main(int argc, char *argv[]){
 
     // main loop to send commands and receive responses
     while (1) {
-        cleanup(command); // clear the buffer
+        cleanup(command); // clear the 
+        
+        printf("promptMode: %d\n", promptMode);
+        fflush(stdout);
 
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
             if (feof(stdin)) {
                 if(promptMode){
                     printf("Client terminating....\n");
-                    clientAlive = 0;
-                    // return 0;
-                    break; // exit on eof ctrl d 
+                    close(sockfd);
+                    pthread_kill(thread, SIGTERM);
+                    break;
                 }
+
+                printf("%s", command);
+
                 if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
                     perror("Failed to send control-d signal");
                 }
@@ -181,6 +189,8 @@ int main(int argc, char *argv[]){
                 continue;
             }
         }
+
+        fflush(stdout);
 
         // remove the newline character from the input 
         command[strcspn(command, "\n")] = 0;
@@ -194,7 +204,15 @@ int main(int argc, char *argv[]){
         //     // Use the function Send_command_to_server 
         //     send_command_to_server(command);
 
+        printf("promptMode: %d\n", promptMode);
+
+        fflush(stdout);
+
+
         send_command_to_server(command);
+
+        
+        fflush(stdout);
 
         // }
         
