@@ -248,8 +248,12 @@ void *logRequest(void *args) {
     fprintf(logFile,"%s yashd[%s:%d]: %s\n", timeString, inet_ntoa(from.sin_addr), ntohs(from.sin_port), request);
     fclose(logFile);
     pthread_mutex_unlock(&lock); // ... unlock
+
+    printf("Writing to log file finished");
     
     pthread_exit(NULL);
+
+    printf("post log");
  }
 
 void* serveClient(void *args) {
@@ -271,7 +275,7 @@ void* serveClient(void *args) {
             exit(-1);
         }
 
-        printf("%s",buffer);
+        printf("command: %s",buffer);
 
         // Handle: CMD<blank><Command_String>\n
         if (strncmp(buffer, "CMD ", 4) == 0) {
@@ -279,7 +283,7 @@ void* serveClient(void *args) {
           char *command = buffer + 4;
           command[strcspn(command, "\n")] = '\0'; // Remove the newline character
 
-          printf("Command: %s-%s\n", buffer, command);
+          printf("Command: %s -> %s\n", buffer, command);
 
           // Allocate memory for LogRequestArgs
           LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
@@ -287,6 +291,8 @@ void* serveClient(void *args) {
           perror("Error allocating memory for log request");
           continue;
           }
+
+          printf("Memory allocated for log request\n");
           
           // Copy the request and client information to the struct
           strncpy(args->request, command, sizeof(args->request) - 1);
@@ -300,6 +306,11 @@ void* serveClient(void *args) {
             pthread_detach(p); // Detach the thread to allow it to run independently
           }
 
+          printf("Thread created for logging\n");
+
+          /*
+          
+
           // Create pipes for communication between parent and child
             if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
               perror("pipe");
@@ -311,6 +322,8 @@ void* serveClient(void *args) {
               perror("fork");
               exit(EXIT_FAILURE);
           }
+
+          commandRunning = 1;
 
           if (pid == 0) {
             // Child process
@@ -324,7 +337,7 @@ void* serveClient(void *args) {
 
             // Execute the command
             // would only work with one word commands: ls, wc, date, etc.
-            execvp(command, &command);
+            execvp(command, command);
             printf("\n#"); // Send # to indicate the end of the command output
 
             exit(EXIT_SUCCESS);
@@ -332,7 +345,7 @@ void* serveClient(void *args) {
             // Parent process
             close(pipefd_stdout[1]); // Close the write end of the stdout pipe
             close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
-            commandRunning = 1;
+            
 
             // Read the child's output from the pipe and send it to the client socket
             while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer))) > 0) {
@@ -343,10 +356,16 @@ void* serveClient(void *args) {
             // Wait for the child process to finish
             waitpid(pid, NULL, 0);
             commandRunning = 0;
-          }
+          } */
+
+         // remove the newline character from the input
+          printf("Command entered: %s\n", command);
+          command[strcspn(command, "\n")] = 0;
+
+          execvp(command, command);
 
           // Send # to indicate the end of the command output
-          if (send(psd, "\n#", sizeof("\n#"), 0) <0 )
+          if (send(psd, "\n# ", sizeof("\n# "), 0) <0 )
 		        perror("sending stream message");
           
         } else if (strncmp(buffer, "CTL ", 4) == 0) { 
@@ -372,9 +391,12 @@ void* serveClient(void *args) {
               // Write the plain text to the stdin of the running command
               write(pipefd_stdin[1], buffer, bytesRead);
           } else {
+              // TODO: Handle plain text input when no command is running
               // If no command is running, send an error message
-              const char *errorMsg = "Error: No command is currently running.\n#";
-              send(psd, errorMsg, strlen(errorMsg), 0);
+
+              // // If no command is running, send an error message
+              // const char *errorMsg = "Error: No command is currently running.\n#";
+              // send(psd, errorMsg, strlen(errorMsg), 0);
           }
         }
     }
