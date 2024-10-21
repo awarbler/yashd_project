@@ -11,14 +11,28 @@
 // Step 1 Include necessary headers and global variables from book
 #include "yashd.h"
 
-
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
 
+void cleanup(char *buf);
+void sig_handler(int signo);
+void send_command_to_server(const char *command);
+void* communication_thread(void *args);
 
+int promptMode = 0;
+
+int clientAlive = 1;
 
 int sockfd = 0; // declare globally to use in signal handler
 
+/* Initialize mutex lock */
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void cleanup(char *buf)
+{
+    int i;
+    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
+}
 
 // Signal handler to manage ctrl c and ctrl z signals 
 void sig_handler(int signo) {
@@ -33,15 +47,25 @@ void sig_handler(int signo) {
     if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
-    printf("Control signal sent to server. \n");
+    printf(" Control signal sent to server. \n");
 }
 
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
+
+    pthread_mutex_lock(&lock); // wrap CS in lock ...
+    promptMode = 0;
+    pthread_mutex_unlock(&lock); // ... unlock
+
+    //printf("before send command: %d\n", promptMode); // display prompt
+    fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
+    cleanup(message); // clear the buffer
+
     // debuggin output: check what is being sent
-    printf("client sending command: %s\n", command);
+    // printf("client sending command: %s\n", command);
+
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "CMD %s\n", command);
 
@@ -51,41 +75,63 @@ void send_command_to_server(const char *command) {
         return;
     }
 
+    //printf("after send command: %d\n", promptMode); // display prompt
+    fflush(stdout);
+}
+
+void* communication_thread(void *args){
     // buffer for receiving response
     char buf[BUFFER_SIZE] = {0};
+    char msg_buf[BUFFER_SIZE*10] = {0}; // Increased size to handle larger messages
+    int bytesRead;
 
-    // rec response from server 
-    int valread = recv(sockfd, buf, BUFFER_SIZE, 0);
-    if (valread < 0) {
-        perror("Error receiving response");
-    } else if (valread > 0) {
-        printf("%s", buf); // print the servers response
-        printf("Client received: %s", buf); // print the servers response
+    while(1) {
+
+        // read response from the server
+        bytesRead = recv(sockfd, buf, BUFFER_SIZE -1, 0);
+        if (bytesRead < 0) {
+            perror("Error receiving response from server");
+            pthread_exit(NULL);
+        } else if (bytesRead == 0) {
+            // server has closed the connection 
+            printf("server closed the connection \n");
+            pthread_exit(NULL);
+
+        } else {
+            buf[bytesRead] = '\0'; // Null-terminate the received data
+
+            // Append the new data to the accumulated message buffer
+            strncat(msg_buf, buf, bytesRead);
+
+            // Process complete messages
+            char *delimiter_pos;
+            while ((delimiter_pos = strstr(msg_buf, "\n# ")) != NULL) {
+                
+                // We found a complete message
+                size_t message_length = delimiter_pos - msg_buf + 3;
+
+                // Print the message
+                printf("%.*s", (int)message_length, msg_buf);
+                fflush(stdout);
+
+                // Remove the processed message from msg_buf
+                size_t remaining_length = strlen(delimiter_pos + 3); // 3 for "\n# "
+                memmove(msg_buf, delimiter_pos + 3, remaining_length + 1); // +1 to copy null terminator
+                msg_buf[remaining_length] = '\0';
+            }
+        } 
     }
+    pthread_exit(NULL);
 }
 
-// handle plain text input after issuing commands like cat 
-void handle_plain_text() {
-    char line[BUFFER_SIZE] = {0};
-
-    // the user can input multiple lines of text until the type eof (ctrl-d)
-    while (fgets(line, sizeof(line), stdin))
-    {
-        /* code */
-        if (send(sockfd, line, strlen(line), 0) < 0) {
-            perror("Failed to send text to the server");
-            break;
-        }
-    }
-    // end of input to the server by closing the connection 
-    shutdown(sockfd, SHUT_WR); // close write channel 
-
-}
 
 
 #ifndef TESTING
 
 int main(int argc, char *argv[]){
+
+    pthread_t thread;
+    int threadStatus;
 
     struct sockaddr_in servaddr; // structure for server address 
 
@@ -117,49 +163,58 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
+    if ((threadStatus = pthread_create(&thread, NULL, communication_thread, (void *)NULL))) {
+      fprintf(stderr, "error: pthread_create, rc: %d\n", threadStatus);
+      return EXIT_FAILURE;
+    }
+
     // set up signal handlers for ctrl c and ctrl z 
     signal(SIGINT, sig_handler); // catch ctrl c sigint
     signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
 
     printf("Connected to server at %s:%d\n", argv[1], PORT);
-    printf("# "); // display prompt
+    // printf("# "); // display prompt
+
+    /* code */
+    char command[BUFFER_SIZE] = {0}; // buffer for user input 
 
     // main loop to send commands and receive responses
-    while (1)
-    {
-        /* code */
-        char command[BUFFER_SIZE] = {0}; // buffer for user input 
+    while (1) {
+        
+        /*pthread_mutex_lock(&lock);
+        if(promptMode) {
+            printf("# ");
+            //printf("1promptMode: %d\n", promptMode);
+            fflush(stdout);
+            promptMode = 0;
+        }
+        pthread_mutex_unlock(&lock);*/
+        cleanup(command); // clear the 
+        
 
         // read command input from the user 
         if (fgets(command, sizeof(command), stdin) ==  NULL) {
             if (feof(stdin)) {
                 printf("Client terminating....\n");
-                break; // exit on eof ctrl d 
+                if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
+                    perror("Failed to send control-d signal");
+                }
+                shutdown(sockfd, SHUT_RDWR);
+                break;
             } else {
                 perror("error reading command");
-                continue;
+                break;
             }
         }
-
-        // remove the newline character from the input 
-        command[strcspn(command, "\n")]  = 0;
-
-        // check if hte command is a file redirecton command cat>file.txt
-        if (strstr(command, ">") != NULL) {
-            send_command_to_server(command); // send command to the server
-            printf("Enter plain text (CTRL-D to end): \n");
-            handle_plain_text(); // hnadle plain text for cat 
-        } else { 
-            // Use the function Send_command_to_server 
-            send_command_to_server(command);
-
-        }
-
+        fflush(stdout);
+        send_command_to_server(command);
     }
-    // close the socket 
 
-    printf("yash client running....\n");
     close(sockfd);
+    pthread_join(thread, NULL);
+    
+    printf("yash client terminated.\n");
+    
     return 0;
 }
 
