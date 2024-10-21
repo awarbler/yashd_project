@@ -1,4 +1,4 @@
-// this is the header file
+// this is the header file yashd.h
 
 // include a guard to prevent mutiple inclusions of the header file
 
