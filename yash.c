@@ -1,4 +1,4 @@
-// this is where the client will be set up 
+// this is where the client will be set up yash.c
 /*
  Step 1 Include necessary headers and global variables from the book 
  Step 2: Set up the Test function to send a command to the server 
