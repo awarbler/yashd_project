@@ -6,7 +6,6 @@
 #define YASHSHELL_H // define yashd_h
 
 #include "yashd.h"
-#include "yashShell.h"
 
 #include <signal.h>         // signal handling sigint sigtstp 
 
