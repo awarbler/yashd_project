@@ -74,7 +74,7 @@ void yash_loop() {
 
     char line[MAX_INPUT]; // buffer for storing input commands
 
-    //har *args[MAX_INPUT]; //array to store the command and arguement 
+    //har *args[MAX_INPUT]; //array to store the command and argument 
     while (1) {
         
         printf("# "); // display the shell prompt 
@@ -91,18 +91,18 @@ void yash_loop() {
             }
         }
 
-        // remove the newline character from the input line 
+        // Remove the newline character from the input line 
         line[strcspn(line, "\n")] = 0;
 
         // check for invalid combinations lif fg & and fg | echo
         if ((strstr(line, "fg &") !=NULL) || (strstr(line, "fg | ") != NULL )|| (strstr(line, "bg &") !=NULL) || (strstr(line, "bg | ") != NULL)){ //invalid combination, move to next line
-            continue; // skp to the next iteration if no command was entered
+            continue; // skip to the next iteration if no command was entered
         }
 
 
-        // check if the user input is empty pressing enter without types anything 
+        // Check if the user input is empty by pressing enter without typing anything 
         if(strlen(line) == 0){
-            continue; // skp to the next iteration if no command was entered
+            continue; // skip to the next iteration if no command was entered
         }
 
         // handle jobs command
@@ -136,17 +136,17 @@ void yash_loop() {
             printf("\n");
             continue;
         }
-        // make a copy of the command line 
+        // Make a copy of the command line 
         char *original_cmd = strdup(line);
 
         // check for a pipe and 
         char *pipe_position = strchr(line, '|');
         if(pipe_position){
-            *pipe_position = '\0'; // splite the input at |
+            *pipe_position = '\0'; // split the input at |
             char *cmd_left = line;
             char *cmd_right = pipe_position + 1;
 
-            // parse both sides of the pipe into arguments 
+            // Parse both sides of the pipe into arguments 
             char *args_left[MAX_ARGS];
             char *args_right[MAX_ARGS];
 
@@ -181,10 +181,10 @@ void yash_loop() {
                 token = strtok(NULL, " ");
             }
             args[i] = NULL; // null terminate the array of arguments 
-            //execute the ecommand
+            //execute the command
             execute_command(args, original_cmd);
         }
-        // after command finishes , display prompt again 
+        // After command finishes , display the prompt again 
         free(original_cmd);
         fflush(stdout);
         //printf("# "); 
@@ -219,7 +219,7 @@ void execute_command(char **cmd_args, char *original_cmd){
     if (pid ==0) {
 
         // child process
-        //setpgid(0,0); // create a new process group with the childs pid
+        //setpgid(0,0); // create a new process group with the child pid
 
         handle_redirection(cmd_args);
         
@@ -248,13 +248,13 @@ void execute_command(char **cmd_args, char *original_cmd){
 
             fg_pid = -1; // -1 Clears the foreground process 
 
-            // return control of the terminal 
+            // Return control of the terminal 
             //tcsetpgrp(STDIN_FILENO, getpgrp());
 
-            // handles the case wehre the job was stopped 
+            // handles the case where the job was stopped 
             if (WIFSTOPPED(status)) {
-                // if the child wa stopped mark it as stopped 
-                // so we are placing a marker 
+                // If the child wa stopped, mark it as stopped 
+                // So we are placing a marker 
                 jobs[job_count -1].is_running = 0;
                 jobs[job_count -1].is_stopped = 1;
                 printf("\n[%d]+  Stopped  %s\n", jobs[job_count - 1].job_id, jobs[job_count - 1].command);
@@ -264,7 +264,7 @@ void execute_command(char **cmd_args, char *original_cmd){
             } else { 
                 //fg_pid = -1; 
                 //job_count--;
-                // The job completed, now remove it from the job list
+                // The job is completed. Now remove it from the job list
                 free(jobs[job_count - 1].command);
                 job_count--;
                 update_job_markers(job_count-1);
@@ -334,7 +334,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
 // signal handler for sigtstp ctrl z 
 void sigint_handler(int sig){
     if (fg_pid > 0) {
-        // if there is a foreground process , send sigint to it 
+        // If there is a foreground process, send sigint to it 
         kill(fg_pid, SIGINT);
 
     } else {
@@ -360,14 +360,14 @@ void sigtstp_handler(int sig){
 void sigchld_handler(int sig){
     int status;
     pid_t pid;
-    // Clean up zombie child processes non blocking wait
+    // Clean up zombie child processes non-blocking wait
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0){ 
         for(int i =0; i < job_count; i++) {
             if (jobs[i].pid == pid) {
                 if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                    // print done messageif needed
+                    // print done message , if needed
                     printf("\n[%d]+ Done %s\n", jobs[i].job_id, jobs[i].command);
-                    // remove the job from the job list 
+                    // Remove the job from the job list 
                     free(jobs[i]. command);
                     for (int j = i; j < job_count - 1; j++) {
                         jobs[j] = jobs[j + 1];
@@ -384,7 +384,7 @@ void add_job(pid_t pid, const char *command, int is_running, int is_background){
 
     if (job_count < MAX_JOBS){ 
         /*for (int i = 0; i < job_count; i++) {
-            // set all existing jobs to hava " -" marker
+            // set all existing jobs to have" -" marker
             jobs[i].is_running = 0;
         }*/
         jobs[job_count].pid = pid;
@@ -428,24 +428,24 @@ void fg_job(int job_id) {
         if (jobs[i].job_id == job_id) {
             found = 1;
             fg_pid = jobs[i].pid;
-            printf("%s\n", jobs[i].command); // prints teh command when bringing to the foreground
-            fflush(stdout); //ensure teh command is printed immediately 
+            printf("%s\n", jobs[i].command); // prints the command when bringing to the foreground
+            fflush(stdout); //ensure the command is printed immediately 
             
             // brings the job to the foreground
-            kill(-jobs[i].pid, SIGCONT);// wait for the process to cont. the stopped proces
+            kill(-jobs[i].pid, SIGCONT);// wait for the process to cont. the stopped process
             
             waitpid(jobs[i].pid, &status, WUNTRACED); // wait for the process to finish or be stopped again 
             
             fg_pid = -1; // no longer a fg process 
 
-            // update job status if it was stopped again 
+            //Update job status if it was stopped again 
             if (WIFSTOPPED(status)){
                 jobs[i].is_running = 0; // mark a stopped 
                 jobs[i].is_stopped = 1;
                 printf("\n[%d]+ Stopped %s\n", jobs[i].job_id, jobs[i].command);
             } else {
                 
-                // if the job finished remove it from the job list 
+                // If the job is finished remove it from the job list 
                 free(jobs[i].command);
                 for (int j = i; j < job_count - 1; j++) {
                     jobs[j] = jobs[j + 1 ];
@@ -463,7 +463,7 @@ void fg_job(int job_id) {
 }
 void bg_job(int job_id) {
     int found = 0; 
-    // if no job id is provide bring the job with the + to foreground 
+    // If no job ID is provide bring the job with the + to the foreground 
     if (job_id == -1) {
         for (int i = job_count -1; i >= 0; i--) {
             if (jobs[i].job_marker == '+') {
@@ -516,7 +516,7 @@ void remove_elements(char **args, int start, int count) {
     args[i] = NULL;
 }
 void setup_signal_handlers() {
-    // register the signal handler 
+    // Register the signal handler 
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
     signal(SIGCHLD, sigchld_handler);
@@ -588,7 +588,7 @@ void apply_redirections(char **cmd_args){
             dup2(err_fd,STDERR_FILENO);
             close(err_fd);
 
-            // shift arguements left to remove redirecton operator and file name 
+            // shift arguments left to remove redirection operator and file name 
             // doing this because err1.txt and err2.txt are not getting created for redirection
             //for (int j = i; cmd_args[j + 2] != NULL; j++){
             //    cmd_args[j] = cmd_args[j+ 2];
