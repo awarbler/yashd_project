@@ -191,14 +191,14 @@ void execute_command(char **cmd_args, char *original_cmd) {
     int status;
     int is_background = 0; 
     
-    if (cmd_args[0]== NULL) {
+    if (cmd_args[0] == NULL) {
         return;
     }
     // Check if the last argument is & indicating a background job
     for (int i = 0; cmd_args[i] != NULL; i++) {
         if (strcmp(cmd_args[i], "&") == 0) {
             is_background = 1;
-            cmd_args[i] = NULL; // Remove & from the argument
+            cmd_args[i] = NULL; // Remove & from the argument list
             break;
         }
     }
@@ -214,26 +214,28 @@ void execute_command(char **cmd_args, char *original_cmd) {
         
         if (execvp(cmd_args[0], cmd_args) == -1){
             printf("\n# "); //  print a newline for invalide commands
+            perror("EXECVP failed");
             exit(EXIT_FAILURE);
         } 
 
     } else if (pid < 0) {
         // fork failed 
+        perror("Fork failed");
         return;
     } else {
         // parent process 
         //setpgid(pid, pid); // set child process group id to its own pid 
 
+        // Add job to job list and run in background 
         if (is_background) {
             
             add_job(pid, original_cmd, 1, 1);
             printf("[%d] %d\n", jobs[job_count - 1].job_id, jobs[job_count - 1].pid);
         } else {
+            // Foreground job 
             fg_pid = pid;
             add_job(pid, original_cmd, 1, 0);
-
-            // put the process group in the foreground and wait for it
-            //tcsetpgrp(STDIN_FILENO, pid);
+            // Wait for the job to finish or be stopped
             waitpid(pid, &status, WUNTRACED);
 
             fg_pid = -1; // -1 Clears the foreground process 
@@ -258,8 +260,6 @@ void execute_command(char **cmd_args, char *original_cmd) {
                 free(jobs[job_count - 1].command);
                 job_count--;
                 update_job_markers(job_count-1);
-
-
                 
             }
         }
@@ -268,15 +268,24 @@ void execute_command(char **cmd_args, char *original_cmd) {
 
 // function to handle file redirection 
 void handle_redirection(char **cmd_args){
+    //close(pipefd_stdout[0]); // Close the read end of the stdout pipe
+    //close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
+    //dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+    //dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+   // dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+   // close(pipefd_stdout[1]);
+   // close(pipefd_stdin[0]);
     apply_redirections(cmd_args);
 }
 // function to handle piping
 void handle_pipe(char **cmd_args_left, char **cmd_args_right){
     int pipe_fd[2];
     pid_t pid1, pid2;
-    
+    int pipefd_stdout[2] ={-1, -1};
+    int pipefd_stdin[2] = {-1, -1};
+
     if (pipe(pipe_fd) == -1){
-        //perror("yash");
+        perror("yash");
         return;
     }
 
@@ -288,7 +297,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
         close(pipe_fd[0]);
         close(pipe_fd[1]);
 
-        handle_redirection(cmd_args_left);
+        apply_redirections(cmd_args_left);
 
         if (execvp(cmd_args_left[0], cmd_args_left) == -1) {
             perror("execvp failed for the left pipe"); // debugging
@@ -306,7 +315,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
         close(pipe_fd[1]);
         close(pipe_fd[0]);
 
-        handle_redirection(cmd_args_left);
+        apply_redirections(cmd_args_right);
 
         if (execvp(cmd_args_right[0], cmd_args_right) == -1) {
             perror("execvp failed for the left pipe"); // debugging
@@ -423,6 +432,7 @@ void fg_job(int job_id) {
             found = 1;
             fg_pid = jobs[i].pid;
             printf("%s\n", jobs[i].command); // prints the command when bringing to the foreground
+
             fflush(stdout); //ensure the command is printed immediately 
             
             // brings the job to the foreground
@@ -442,7 +452,7 @@ void fg_job(int job_id) {
                 // If the job is finished, remove it from the job list 
                 free(jobs[i].command);
                 for (int j = i; j < job_count - 1; j++) {
-                    jobs[j] = jobs[j + 1 ];
+                    jobs[j] = jobs[j + 1];
                 }
                 job_count--;
                 update_job_markers(job_count -1);
@@ -476,7 +486,7 @@ void bg_job(int job_id) {
             jobs[i].is_running = 1;
             jobs[i].is_stopped = 0;
             jobs[i].is_background = 1;
-            kill(-jobs[i].pid, SIGCONT);
+            kill(-jobs[i].pid, SIGCONT); // resume the stopped job in the background 
             printf("[%d]%c %s    %s &\n", jobs[i].job_id,jobs[i].job_marker, "Running", jobs[i].command);
             update_job_markers(i);
             break;
