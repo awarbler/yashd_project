@@ -184,24 +184,21 @@ void yash_loop() {
 }
 
 // function to execute the command by creating a child process using fork()
-void execute_command(char **cmd_args, char *original_cmd){
+void execute_command(char **cmd_args, char *original_cmd) {
 
     pid_t pid;
-        //pid_t pid = fork(); // create a new process 
+    //pid_t pid = fork(); // create a new process 
     int status;
     int is_background = 0; 
     
     if (cmd_args[0]== NULL) {
         return;
     }
-    
-
-
-    // check if the last argument is & indicating a background job
+    // Check if the last argument is & indicating a background job
     for (int i = 0; cmd_args[i] != NULL; i++) {
         if (strcmp(cmd_args[i], "&") == 0) {
             is_background = 1;
-            cmd_args[i] = NULL; // remove & from the argument
+            cmd_args[i] = NULL; // Remove & from the argument
             break;
         }
     }
@@ -209,11 +206,11 @@ void execute_command(char **cmd_args, char *original_cmd){
     pid = fork();
     
     if (pid ==0) {
-
         // child process
-        setpgid(0,0); // create a new process group with the child pid
+        setpgid(0,0); // Set a new process group with the child pid
 
-        handle_redirection(cmd_args);
+        //handle_redirection(cmd_args);
+        apply_redirections(cmd_args);
         
         if (execvp(cmd_args[0], cmd_args) == -1){
             printf("\n# "); //  print a newline for invalide commands

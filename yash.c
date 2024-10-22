@@ -66,6 +66,12 @@ void send_command_to_server(const char *command) {
     // debuggin output: check what is being sent
     // printf("client sending command: %s\n", command);
 
+    // split the command by spaces to handle redirection and pipes 
+    // Use strtok to split the command
+    char * command_copy = strdup(command);
+    char *token = strtok(command_copy, " ");
+   
+
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "CMD %s\n", command);
 
