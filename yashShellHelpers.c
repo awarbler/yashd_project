@@ -38,7 +38,7 @@ typedef struct job {
 
 job_t jobs[MAX_JOBS];
 int job_count = 0;
-pid_t fg_pid ;
+pid_t fg_pid = -1;
 
 // function prototypes
 

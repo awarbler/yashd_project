@@ -6,7 +6,7 @@ CC = gcc
 CFLAGS = -Wall -pthread
 
 # Target to build the server (yashd) and the client(yash)
-TARGETS = yashd yash yashShell
+TARGETS = yashd yash
 
 # default target that will be built if 'make' is run without arguments
 all: $(TARGETS) # BUILD BOTH YASHD AND YASH executables
@@ -34,9 +34,6 @@ yashd.o: yashd.c yashd.h
 # Compile yash.c into yash.o, include the headers from the included directory
 yash.o: yash.c yashd.h 
 	$(CC) $(CFLAGS) -c yash.c -o yash.o 
-
-yashShell.o: yashShell.c yashd.h 
-	$(CC) $(CFLAGS) -c yashShell.c -o yashShell.o 
 
 yashShellHelpers.o: yashShellHelpers.c yashShell.h 
 	$(CC) $(CFLAGS) -c yashShellHelpers.c -o yashShellHelpers.o 

@@ -14,21 +14,6 @@
 # define MAX_ARGS 100
 # define MAX_JOBS 20 
 
-typedef struct job {
-    pid_t pid;
-    int job_id;
-    char *command;
-    int is_running;
-    int is_stopped;
-    int is_background;
-    char job_marker; // + or - or " "
-} job_t;
-
-
-extern job_t jobs[MAX_JOBS];
-extern int job_count = 0;
-extern pid_t fg_pid = -1;
-
 
 // Shared function Prototypes // Job Control and Piping 
 void execute_command(char **cmd_args, char *original_cmd);
