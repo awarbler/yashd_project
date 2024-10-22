@@ -67,4 +67,4 @@ dkms.conf
 yash
 yash.o
 yashd
-yashd.o
+yashd.o.DS_Store
