@@ -1,0 +1,11 @@
+Opening log file at path: ./tmp/yashd.log
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ Writing to log file: ls
+CMD ls | wc 
+
+Command: CMD ls | wc -ls | wc 
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ Opening log file at path: ./tmp/yashd.log
+Writing to log file: ls

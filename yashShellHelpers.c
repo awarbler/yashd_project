@@ -280,7 +280,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
         return;
     }
 
-    //pid1 = fork(); // left child process
+    pid1 = fork(); // left child process
     if ((pid1 = fork() == 0)) {
         
         // first child left side command like ls
@@ -298,7 +298,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
         } 
     }
 
-        //pid2 = fork(); // right side of the pipe child process
+    pid2 = fork(); // right side of the pipe child process
     if ((pid2 = fork() == 0)) {
         
         dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
@@ -525,14 +525,15 @@ void apply_redirections(char **cmd_args){
     // loop through the command arguments to find redirection symbols 
     while (cmd_args[i] != NULL){
         // Input redirection 
-        if (strcmp(cmd_args[i], "<") == 0){
+        if (strcmp(cmd_args[i], "<") == 0) {
             if (cmd_args[i + 1] == NULL) {
                 fprintf(stderr, " Error: expected filename after '<'\n");
                 exit(EXIT_FAILURE);
             }
 
             in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection 
-            if (in_fd < 0 ){
+
+            if (in_fd < 0 ) {
                 perror("Error opening file for input.");
                 exit(EXIT_FAILURE); // exit child process on failure
             }
@@ -540,17 +541,17 @@ void apply_redirections(char **cmd_args){
             dup2(in_fd, STDIN_FILENO); // replace stdin with the file 
             close(in_fd);
             // Remove the redirection arguments from the command 
-            remove_elements(cmd_args, i , 2);
+            remove_elements(cmd_args, i, 2);
             continue; // recheck current position 
             // Output redirection
         } else if (strcmp(cmd_args[i], ">") == 0) { 
-            if (cmd_args[i +1] == NULL) {
+            if (cmd_args[i + 1] == NULL) {
                 fprintf(stderr, "Error: expected file name after '>\n");
                 exit(EXIT_FAILURE);
             }
-
             // output direction 
-            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0644);
+            //TODO check it I need to delete if change below doesnt work out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0644);
+            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (out_fd < 0) {
                 perror("Error opening file for output");
                 exit(EXIT_FAILURE);
