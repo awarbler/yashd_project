@@ -525,81 +525,69 @@ void apply_redirections(char **cmd_args){
     int i = 0;
     int in_fd = -1, out_fd = -1, err_fd = -1;
 
+    // loop through the command arguments to find redirection symbols 
     while (cmd_args[i] != NULL){
-
+        // Input redirection 
         if (strcmp(cmd_args[i], "<") == 0){
             if (cmd_args[i + 1] == NULL) {
-                fprintf(stderr, " yash: expected filename after '<'\n");
+                fprintf(stderr, " Error: expected filename after '<'\n");
                 exit(EXIT_FAILURE);
             }
 
             in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection 
             if (in_fd < 0 ){
-                //cmd_args[i] = NULL;
-                //cmd_args[i - 1] = NULL;
-                perror("yash");
+                perror("Error opening file for input.");
                 exit(EXIT_FAILURE); // exit child process on failure
-                //return;
             }
-            
+            // Redirect input from the file
             dup2(in_fd, STDIN_FILENO); // replace stdin with the file 
             close(in_fd);
-
+            // Remove the redirection arguments from the command 
             remove_elements(cmd_args, i , 2);
             continue; // recheck current position 
-
+            // Output redirection
         } else if (strcmp(cmd_args[i], ">") == 0) { 
             if (cmd_args[i +1] == NULL) {
-                fprintf(stderr, " yash: expected file name after '>\n");
+                fprintf(stderr, "Error: expected file name after '>\n");
                 exit(EXIT_FAILURE);
             }
 
             // output direction 
-            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH );
+            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0644);
             if (out_fd < 0) {
-                perror("yash");
+                perror("Error opening file for output");
                 exit(EXIT_FAILURE);
-                //return;
             }
-            // debugging 
-            //printf("redirection output file : %s\n" , cmd_args[i+1]);
-
+            // Redirect output to the file
             dup2(out_fd,STDOUT_FILENO);
             close(out_fd);
 
-            remove_elements(cmd_args, i , 2);
+            remove_elements(cmd_args, i, 2);
             continue; // recheck current position 
+        // Error Redirection   
         } else if (strcmp(cmd_args[i], "2>") == 0){
             // error redirection 
             //err_fd = open(cmd_args[i + 1],O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH );
-            if (cmd_args[i+1] == NULL) {
-                perror("yash expected filename after 2>\n");
+            if (cmd_args[i + 1] == NULL) {
+                //perror("yash expected filename after 2>\n");
+                fprintf(stderr, "Error: expected filename after '2>'\n");
                 exit (EXIT_FAILURE);
-                //return;
             }
-
-            // error redirection 
+            // Error redirection 
             err_fd = open(cmd_args[i + 1],O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH );
             if (err_fd < 0) {
-                perror("yash");
+                perror("Error opening file for error redirection");
                 exit(EXIT_FAILURE);
             }
+            // Redirect stderr to the file
             //printf("redirection output file : %s\n" , cmd_args[i+1]);
             dup2(err_fd,STDERR_FILENO);
             close(err_fd);
 
-            // shift arguments left to remove redirection operator and file name 
-            // doing this because err1.txt and err2.txt are not getting created for redirection
-            //for (int j = i; cmd_args[j + 2] != NULL; j++){
-            //    cmd_args[j] = cmd_args[j+ 2];
-            //}
-            //cmd_args[i] = NULL;
-            //cmd_args[i + 1] = NULL;
-            //i--;
             remove_elements(cmd_args, i, 2);
             continue;
         }
-        i++;
+        i++; // Move to the next argument if no redirection was found 
     }
 }
 
