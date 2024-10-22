@@ -1,23 +1,10 @@
 Opening log file at path: ./tmp/yashd.log
-sent # to clients s4sent over to client  #3 
-...server is waiting...
- Writing to log file: ls
-CMD ls | wc 
-Command: CMD ls | wc -ls | wc 
-Writing to log file: ls
-sent # to clients s4sent over to client  #3 
-...server is waiting...
- CMD wc < foo.txt
-
-Command: wc < foo.txt
-Opening log file at path: ./tmp/yashd.log
 Writing to log file: wc
 Memore allocated for client arguments
 Thread created to serve client
 Server is waiting
 sent over to client prompt from s1
 ...server is waiting...
- CMD ls | wc
+ CMD < ls
 
-Command: ls | wc
-
+Command: < ls
