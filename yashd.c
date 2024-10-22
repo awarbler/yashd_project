@@ -313,6 +313,18 @@ void* serveClient(void *args) {
           command[strcspn(command, "\n")] = '\0'; // Remove the newline character
 
           printf("Command: %s-%s\n", buffer, command);
+          
+          char *cmd_args[10];
+          int i = 0;
+          cmd_args[i] = strtok(command, " ");
+          while (cmd_args[i] != NULL && i < 9)
+          {
+            i++;
+            cmd_args[i] = strtok(NULL, " ");
+          }
+
+          // Handle Redirection
+          apply_redirections(cmd_args); // apply redirections
 
           // Allocate memory for LogRequestArgs
           LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
