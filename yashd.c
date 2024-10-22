@@ -289,8 +289,10 @@ void* serveClient(void *args) {
         printf("\n...server is waiting...\n ");
 
         cleanup(buffer); // clear the buffer
+
         bytesRead=recv(psd, buffer, sizeof(buffer), 0);
 
+        // Receive command from client
         if (bytesRead <= 0){ // read data from the client
             if (bytesRead == 0) {
               // connection closed by client 
@@ -302,7 +304,7 @@ void* serveClient(void *args) {
             pthread_exit(NULL);
         }
 
-        buffer[bytesRead] = '\0';
+        buffer[bytesRead] = '\0'; // NULL terminate the received data
 
         printf("%s",buffer);
 
@@ -312,7 +314,7 @@ void* serveClient(void *args) {
           char *command = buffer + 4;
           command[strcspn(command, "\n")] = '\0'; // Remove the newline character
 
-          printf("Command: %s-%s\n", buffer, command);
+          printf("Command: %s\n", command);
           
           char *cmd_args[10];
           int i = 0;
@@ -346,10 +348,10 @@ void* serveClient(void *args) {
           }
 
           // Create pipes for communication between parent and child
-            if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
-              perror("pipe");
-              exit(EXIT_FAILURE);
-            }
+          if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
+            perror("pipe");
+            exit(EXIT_FAILURE);
+          }
 
           // Fork a child process to execute the command
           if ((pid = fork()) == -1) {
@@ -372,32 +374,32 @@ void* serveClient(void *args) {
            args[i] = strtok(command, " ");
            while (args[i] != NULL && i < 9)
            {
-            /* code */
+            
             i++;
             args[i] = strtok(NULL, " ");
            }
            // execute the command 
-           if (execvp(args[0], args) == -1) {
+           //if (execvp(args[0], args) == -1) {
+            if (execvp(cmd_args[0], cmd_args)) {
             perror("execvp failed");
             exit(EXIT_FAILURE);
-           }
-
-            exit(EXIT_SUCCESS);
+           } //exit(EXIT_SUCCESS);
           } else {
-            
-            
             // Parent process
             close(pipefd_stdout[1]); // Close the write end of the stdout pipe
             close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
             commandRunning = 1;
 
-            // Wait for the child process to finish
-            waitpid(pid, NULL, 0);
-
             // Read the child's output from the pipe and send it to the client socket
             while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer))) > 0) {
-                send(psd, buffer, bytesRead, 0);
+              send(psd, buffer, bytesRead, 0);
             }
+
+            // Wait for the child process to finish
+            waitpid(pid, NULL, 0);
+            commandRunning = 0;
+
+            pid = -1; 
 
             if (send(psd, "\n# ", sizeof("\n# "), 0) <0 ){
             perror("sending stream message");
@@ -405,11 +407,7 @@ void* serveClient(void *args) {
               printf("sent # to clients s4");
 
             }
-            
-
-            close(pipefd_stdout[0]);
-
-            commandRunning = 0;
+            //close(pipefd_stdout[0]);
           }
 
           // // Send # to indicate the end of the command output
@@ -438,27 +436,29 @@ void* serveClient(void *args) {
             }
 
           } else if (controlChar == 'd') {
-            if (pipefd_stdin[1] != -1) {
-              close(pipefd_stdin[1]);
-              pipefd_stdin[1] = -1;
+            //if (pipefd_stdin[1] != -1) {
+              //close(pipefd_stdin[1]);
+              //pipefd_stdin[1] = -1;
               printf("Closed write end of stdin pipe\n");
-            }
-            commandRunning = 0;
+            //}
+            //commandRunning = 0;
           }
         } else {
           // Handle plain text input
-          if (commandRunning) {
+          //if (commandRunning) {
               // Write the plain text to the stdin of the running command
-              write(pipefd_stdin[1], buffer, bytesRead);
-          } else {
+              //write(pipefd_stdin[1], buffer, bytesRead);
+          //} 
+          //else {
               // If no command is running, send an error message
               const char *errorMsg = "Error: No command is currently running.\n#";
               send(psd, errorMsg, strlen(errorMsg), 0);
           }
         }
+        pthread_exit(NULL);
     }
-    pthread_exit(NULL);
-}
+    
+//}
 
 void reusePort(int s)
 {

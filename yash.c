@@ -44,7 +44,7 @@ void sig_handler(int signo) {
     }
 
     // Send the control message to the server
-    if ( send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
+    if (send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
         perror("Failed to send control signal");
     }
     printf(" Control signal sent to server. \n");
@@ -129,7 +129,6 @@ void* communication_thread(void *args){
     }
     pthread_exit(NULL);
 }
-
 
 
 #ifndef TESTING
