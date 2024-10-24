@@ -16,9 +16,9 @@
 
 
 // Shared function Prototypes // Job Control and Piping 
-void execute_command(char **cmd_args, char *original_cmd);
+void execute_command(char **cmd_args, char *original_cmd, int psd);
 void handle_redirection(char **cmd_args);
-void handle_pipe(char **cmd_args_left, char **cmd_args_right);//function to handle piping commands
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);//function to handle piping commands
 void apply_redirections(char **cmd_args);
 void remove_elements(char **args, int start, int count);
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
@@ -26,6 +26,7 @@ void update_job_markers(int current_job_index) ;
 void print_jobs();
 void fg_job(int job_id);
 void bg_job(int job_id);
+void yash_loop(int psd);
 
 void setup_signal_handlers(); // function to set up signal handlers 
 void sigint_handler(int sig);// signal handler for SIGINT(Ctrl - c)

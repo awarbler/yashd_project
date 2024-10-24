@@ -43,9 +43,9 @@ pid_t fg_pid = -1;
 // function prototypes
 
 // Shared function Prototypes // Job Control and Piping 
-void execute_command(char **cmd_args, char *original_cmd);
+void execute_command(char **cmd_args, char *original_cmd, int psd);
 void handle_redirection(char **cmd_args);
-void handle_pipe(char **cmd_args_left, char **cmd_args_right);//function to handle piping commands
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);//function to handle piping commands
 void apply_redirections(char **cmd_args);
 void remove_elements(char **args, int start, int count);
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
@@ -54,22 +54,54 @@ void print_jobs();
 void fg_job(int job_id);
 void bg_job(int job_id);
 
-void yash_loop();
+void yash_loop(int psd);
 void remove_newLine(char *line);
 void run_in_background(char **cmd_args);
 void setup_signal_handlers();
 void handle_control(int psd, char control);
 extern void handle_command(char *command, int psd);
 
+extern char *log_path;
 // main shell loop that runs the shells
-void yash_loop() {
+void yash_loop(int psd) {
 
     char line[MAX_INPUT]; // buffer for storing input commands
+    char results[BUFFER_SIZE];
 
     //har *args[MAX_INPUT]; //array to store the command and arguments 
     while (1) {
-        
+                
         printf("# "); // display the shell prompt 
+
+        // instead of reading from stdin read from socket 
+        int byteRead = recv(psd, line, sizeof(line) -1 , 0);
+
+        if (byteRead <=0) {
+            if (byteRead == 0) {
+                printf("Client terminating....\n");
+
+            } else {
+                perror("error reading command");
+                break;
+            }
+            close(psd);
+            pthread_exit(NULL);
+        }
+
+        // read command input from the user 
+        /*if (fgets(command, sizeof(command), stdin) ==  NULL) {
+            if (feof(stdin)) {
+                printf("Client terminating....\n");
+                if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
+                    perror("Failed to send control-d signal");
+                }
+                shutdown(sockfd, SHUT_RDWR);
+                break;
+            } else {
+                perror("error reading command");
+                break;
+            }
+        }*/
 
         // get user input
         if (fgets(line, sizeof(line), stdin) == NULL) {
@@ -84,13 +116,13 @@ void yash_loop() {
         }
 
         // Remove the newline character from the input line 
-        line[strcspn(line, "\n")] = 0;
+        //line[strcspn(line, "\n")] = 0;
+        line[byteRead] = '\0';
 
         // check for invalid combinations lif fg & and fg | echo
         if ((strstr(line, "fg &") !=NULL) || (strstr(line, "fg | ") != NULL )|| (strstr(line, "bg &") !=NULL) || (strstr(line, "bg | ") != NULL)){ //invalid combination, move to next line
             continue; // skp to the next iteration if no command was entered
         }
-
 
         // Check if the user input is empty by pressing enter without typing anything 
         if(strlen(line) == 0){
@@ -143,7 +175,7 @@ void yash_loop() {
             char *args_right[MAX_ARGS];
 
             int i = 0;
-            char *token = strtok(line, " ");
+            char *token = strtok(cmd_left, " ");
             while (token != NULL && i < MAX_ARGS - 1)
             {
                 
@@ -160,7 +192,7 @@ void yash_loop() {
                 token = strtok(NULL, " ");
             }
             args_right[i] = NULL;
-            handle_pipe(args_left, args_right);   
+            handle_pipe(args_left, args_right,psd);   
         } else {
             //split the input line into command arguments
             char *args[MAX_INPUT];
@@ -174,7 +206,9 @@ void yash_loop() {
             }
             args[i] = NULL; // null terminate the array of arguments 
             //execute the command
-            execute_command(args, original_cmd);
+            execute_command(args, original_cmd, psd);
+            // send back to client 
+            send(psd, results, strlen(results), 0);
         }
         // After command finishes , display the prompt again 
         free(original_cmd);
@@ -184,16 +218,74 @@ void yash_loop() {
 }
 
 // function to execute the command by creating a child process using fork()
-void execute_command(char **cmd_args, char *original_cmd) {
+void execute_command(char **cmd_args, char *original_cmd, int psd) {
 
     pid_t pid;
     //pid_t pid = fork(); // create a new process 
     int status;
-    int is_background = 0; 
-    
-    if (cmd_args[0] == NULL) {
-        return;
+    int pipefd[2];
+    ssize_t bytesRead;
+    char buffer[BUFFER_SIZE];
+    char results[BUFFER_SIZE];
+    int is_background = 0;
+    int pipefd_stdout[2] ={-1, -1};
+    int pipefd_stdin[2] = {-1, -1};
+
+    for (int i = 0; cmd_args[i]!= NULL; i++) {
+        if (strcmp(cmd_args[i], "&") == 0)
+        {
+            is_background = 1;
+            cmd_args[i] = NULL; // Remove & from the argument
+            break;
+        }
     }
+
+    // check for a pipe and 
+    char *pipe_position = strchr(original_cmd, '|');
+    if(pipe_position){
+        *pipe_position = '\0'; // split the input at |
+        char *cmd_left = strtok(original_cmd, '|');
+        char *cmd_right = strtok(NULL, '|');
+        // Parse both sides of the pipe into arguments 
+        char *args_left[MAX_ARGS];
+        char *args_right[MAX_ARGS];
+        int i = 0; // parse both commands
+        args_left[i] = strtok(cmd_left, " ");
+
+        while (args_left[i] != NULL && i < MAX_ARGS - 1)
+        {
+            i++;
+            args_left[i] = strtok(NULL, " ");
+        }
+        args_left[i] = NULL; 
+        
+        i = 0;
+        args_right[i] = strtok(cmd_right, " ");
+        while (args_right[i] != NULL && i < MAX_ARGS - 1)
+        {
+            i++;
+            args_right[i] = strtok(NULL, " ");
+        }
+        
+        handle_pipe(args_left, args_right, psd);   
+    } else {
+        //split the input line into command arguments
+        char *args[MAX_INPUT];
+        apply_redirections(cmd_args);
+        
+        char *token = strtok(cmd_args, " ");
+        int i = 0 ;
+        while (token != NULL)
+        {
+           
+            args[i++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[i] = NULL; // null terminate the array of arguments 
+        //execute the command
+        execute_command(cmd_args, args, psd);
+    }
+
     // Check if the last argument is & indicating a background job
     for (int i = 0; cmd_args[i] != NULL; i++) {
         if (strcmp(cmd_args[i], "&") == 0) {
@@ -203,10 +295,54 @@ void execute_command(char **cmd_args, char *original_cmd) {
         }
     }
 
+    if (cmd_args == NULL || cmd_args[0] == NULL) {
+        perror("command arguments are invalid");
+        return;
+    }
+
+    if (cmd_args[0] == NULL)
+    {
+        perror("invalid command");
+        return;
+    }
+
+    // server Context
+    if (psd >= 0)
+    {
+        if (pipe(pipefd) == -1)
+        {
+            perror("PIPE error ");
+            return;
+        }
+    }
+
     pid = fork();
     
-    if (pid ==0) {
-        // child process
+    if (pid == 0) {
+
+        // Child process
+        // Redirect stdout and stderr to the pile
+        apply_redirections(cmd_args);
+
+        // Child process
+        close(pipefd_stdout[0]); // Close the read end of the stdout pipe
+        close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
+        
+        dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+        dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+        dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+        
+        close(pipefd_stdout[1]);
+        close(pipefd_stdin[0]);
+        // socket if psd > 0
+        if (psd >= 0)
+        {
+            close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[1]);
+        }
+
         setpgid(0,0); // Set a new process group with the child pid
 
         //handle_redirection(cmd_args);
@@ -222,9 +358,17 @@ void execute_command(char **cmd_args, char *original_cmd) {
         // fork failed 
         perror("Fork failed");
         return;
-    } else {
+    } else if (pid > 0) {
         // parent process 
+         // Fork failed
+        if (psd >= 0)
+        {
+            close(pipefd[0]);
+            close(pipefd[1]);
+        }
         //setpgid(pid, pid); // set child process group id to its own pid 
+        int status;
+        waitpid(pid, &status, 0);
 
         // Add job to job list and run in background 
         if (is_background) {
@@ -233,71 +377,96 @@ void execute_command(char **cmd_args, char *original_cmd) {
             printf("[%d] %d\n", jobs[job_count - 1].job_id, jobs[job_count - 1].pid);
         } else {
             // Foreground job 
-            fg_pid = pid;
-            add_job(pid, original_cmd, 1, 0);
-            // Wait for the job to finish or be stopped
-            waitpid(pid, &status, WUNTRACED);
 
-            fg_pid = -1; // -1 Clears the foreground process 
+            //  parent process
+            if (psd >= 0) {
+                close(pipefd[1]);
 
-            // Return control of the terminal 
-            //tcsetpgrp(STDIN_FILENO, getpgrp());
+                // Read from pipe and send to client
+                while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0)
+                {
+                    send(psd, buffer, bytesRead, 0);
+                }
+                close(pipefd[1]);
+                waitpid(pid, &status, 0);
+            } else {
+                fg_pid = pid;
+            add_job(pid, original_cmd, 1, is_background);
+            if (is_background){
+                // add_job(pid, original_cmd, 1, 1);
+                printf("[%d] %d\n", jobs[job_count - 1].job_id, jobs[job_count - 1].pid);
+            } else {
+                //fg_pid = pid;
+                //add_job(pid, original_cmd, 1, 0);
+                // Wait for the job to finish or be stopped
+                waitpid(pid, &status, WUNTRACED);
 
-            // handles the case where the job was stopped 
-            if (WIFSTOPPED(status)) {
-                // If the child wa stopped, mark it as stopped 
-                // So we are placing a marker 
-                jobs[job_count -1].is_running = 0;
-                jobs[job_count -1].is_stopped = 1;
-                printf("\n[%d]+  Stopped  %s\n", jobs[job_count - 1].job_id, jobs[job_count - 1].command);
+                fg_pid = -1; // -1 Clears the foreground process 
+                // Return control of the terminal 
+                //tcsetpgrp(STDIN_FILENO, getpgrp());
 
-                //printf("\n[%d]  - stopped %s\n", job_count , cmd_args[0]);
+                // handles the case where the job was stopped 
+                if (WIFSTOPPED(status)) {
+                    // If the child wa stopped, mark it as stopped 
+                    // So we are placing a marker 
+                    jobs[job_count -1].is_running = 0;
+                    jobs[job_count -1].is_stopped = 1;
+                    printf("\n[%d]+  Stopped  %s\n", jobs[job_count - 1].job_id, jobs[job_count - 1].command);
 
-            } else { 
-                //fg_pid = -1; 
-                //job_count--;
-                // The job is completed, now remove it from the job list
-                free(jobs[job_count - 1].command);
-                job_count--;
-                update_job_markers(job_count-1);
-                
+                    //printf("\n[%d]  - stopped %s\n", job_count , cmd_args[0]);
+                } else { 
+                    //fg_pid = -1; 
+                    //job_count--;
+                    // The job is completed, now remove it from the job list
+                    free(jobs[job_count - 1].command);
+                    job_count--;
+                    update_job_markers(job_count-1);
+                    }
+                }
             }
-        }
+
+            
+        } 
     }
 }
 
 // function to handle file redirection 
 void handle_redirection(char **cmd_args){
-    //close(pipefd_stdout[0]); // Close the read end of the stdout pipe
-    //close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
-    //dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
-    //dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
-   // dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
-   // close(pipefd_stdout[1]);
-   // close(pipefd_stdin[0]);
+
     apply_redirections(cmd_args);
 }
 // function to handle piping
-void handle_pipe(char **cmd_args_left, char **cmd_args_right){
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd){
     int pipe_fd[2];
     pid_t pid1, pid2;
+    ssize_t bytesRead;
+    char buffer[BUFFER_SIZE];
     int pipefd_stdout[2] ={-1, -1};
     int pipefd_stdin[2] = {-1, -1};
 
     if (pipe(pipe_fd) == -1){
-        perror("yash");
-        return;
+        perror("Pipe failed");
+        exit(EXIT_FAILURE);
+        //return;
     }
 
     pid1 = fork(); // left child process
-    if ((pid1 = fork() == 0)) {
+    if (pid1 == 0) {
         
         // first child left side command like ls
+        close(pipe_fd[0]); // lose read end of stdout pipe 
+
         dup2(pipe_fd[1], STDOUT_FILENO); // redirect stdout to the pipe
-        close(pipe_fd[0]);
+        
         close(pipe_fd[1]);
 
         apply_redirections(cmd_args_left);
+
+        //dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+        //dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+            
+        //close(pipefd_stdout[1]);
+        //close(pipe_fd[0]); // lose read end of stdout pipe 
 
         if (execvp(cmd_args_left[0], cmd_args_left) == -1) {
             perror("execvp failed for the left pipe"); // debugging
@@ -308,14 +477,29 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
     }
 
     pid2 = fork(); // right side of the pipe child process
-    if ((pid2 = fork() == 0)) {
+    if (pid2 == 0) {
+
+        // first child left side command like ls
+        close(pipe_fd[0]); // lose read end of stdout pipe 
+
+        dup2(pipe_fd[1], STDIN_FILENO); // redirect stdout to the pipe
         
-        dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
-        // Close both ends of the pipe in the child 
         close(pipe_fd[1]);
-        close(pipe_fd[0]);
 
         apply_redirections(cmd_args_right);
+
+        //dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+        //dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+            
+        //close(pipefd_stdout[1]);
+        //close(pipe_fd[0]); // lose read end of stdout pipe 
+        
+        //dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
+        // Close both ends of the pipe in the child 
+        //close(pipe_fd[1]);
+        //close(pipe_fd[0]);
+
+        //apply_redirections(cmd_args_right);
 
         if (execvp(cmd_args_right[0], cmd_args_right) == -1) {
             perror("execvp failed for the left pipe"); // debugging
@@ -325,16 +509,42 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right){
         } 
     }
 
+    
+    //close(pipefd_stdout[0]);
+    // Wait for the child process to finish
+
+    
     // parent process closes pipe and waits for children to finish 
     close(pipe_fd[0]);
     close(pipe_fd[1]);
 
-    waitpid(pid1,NULL,0);
-    waitpid(pid2,NULL,0);
+    // Read from pipe and send to client
+    //while ((bytesRead = read(pipe_fd[0], buffer, sizeof(buffer))) > 0)
+    //{
+      //  send(psd, buffer, bytesRead, 0);
+    //}
+
+   waitpid(pid1,NULL,0);
+   waitpid(pid2,NULL,0);
+
+    // Read the child's output from the pipe and send it to the client socket
+    while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer) - 1)) > 0) {
+      buffer[bytesRead] = '\0';
+      send(psd, buffer, bytesRead, 0);
+    }
+
+   FILE *logFile = fopen(log_path, "a");
+    if (logFile == NULL) {
+        perror("Error opening log file");
+
+        return;
+    }
+    fprintf(logFile,"Executed command %s | %s\n", cmd_args_left[0], cmd_args_right[0]);
+    fclose(logFile);
 }
 
 // signal handler for sigtstp ctrl z 
-void sigint_handler(int sig){
+void sigint_handler(int sig) {
     if (fg_pid > 0) {
         // If there is a foreground process, send a sigint to it 
         kill(fg_pid, SIGINT);
@@ -347,7 +557,7 @@ void sigint_handler(int sig){
 }
 
 // signal handler for sigtstp ctrl z 
-void sigtstp_handler(int sig){
+void sigtstp_handler(int sig) {
     if (fg_pid > 0) {
         // if there is a foreground process , send sigint to it 
         kill(fg_pid, SIGTSTP);
@@ -360,7 +570,7 @@ void sigtstp_handler(int sig){
         
 }
 // signal handler for sigtstp ctrl z 
-void sigchld_handler(int sig){
+void sigchld_handler(int sig) {
     int status;
     pid_t pid;
     // Clean up zombie child processes non-blocking wait
@@ -536,6 +746,7 @@ void apply_redirections(char **cmd_args){
     while (cmd_args[i] != NULL){
         // Input redirection 
         if (strcmp(cmd_args[i], "<") == 0) {
+
             if (cmd_args[i + 1] == NULL) {
                 fprintf(stderr, " Error: expected filename after '<'\n");
                 exit(EXIT_FAILURE);
@@ -547,35 +758,43 @@ void apply_redirections(char **cmd_args){
                 perror("Error opening file for input.");
                 exit(EXIT_FAILURE); // exit child process on failure
             }
+
+
+
             // Redirect input from the file
             dup2(in_fd, STDIN_FILENO); // replace stdin with the file 
             close(in_fd);
             // Remove the redirection arguments from the command 
             remove_elements(cmd_args, i, 2);
             continue; // recheck current position 
+
             // Output redirection
         } else if (strcmp(cmd_args[i], ">") == 0) { 
+
+            // output direction 
             if (cmd_args[i + 1] == NULL) {
                 fprintf(stderr, "Error: expected file name after '>\n");
                 exit(EXIT_FAILURE);
             }
-            // output direction 
-            //TODO check it I need to delete if change below doesnt work out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0644);
-            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            //TODO check it I need to delete if change below doesnt work 
+            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0644);
+            //out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (out_fd < 0) {
                 perror("Error opening file for output");
                 exit(EXIT_FAILURE);
             }
+
+            
             // Redirect output to the file
             dup2(out_fd,STDOUT_FILENO);
             close(out_fd);
 
             remove_elements(cmd_args, i, 2);
-            continue; // recheck current position 
+            continue; // recheck current position
+
         // Error Redirection   
         } else if (strcmp(cmd_args[i], "2>") == 0){
             // error redirection 
-            //err_fd = open(cmd_args[i + 1],O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH );
             if (cmd_args[i + 1] == NULL) {
                 //perror("yash expected filename after 2>\n");
                 fprintf(stderr, "Error: expected filename after '2>'\n");
@@ -588,7 +807,6 @@ void apply_redirections(char **cmd_args){
                 exit(EXIT_FAILURE);
             }
             // Redirect stderr to the file
-            //printf("redirection output file : %s\n" , cmd_args[i+1]);
             dup2(err_fd,STDERR_FILENO);
             close(err_fd);
 

@@ -1,0 +1,16 @@
+Opening log file at path: ./tmp/yashd.log
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ Writing to log file: ls
+Received Buffer: CMD cat in1.txt > out1.txt | cat < in2.txt
+
+Command Received: cat in1.txt > out1.txt | cat < in2.txt
+
+...server is waiting...
+ Received Buffer: CMD cat in1.txt | cat
+
+Command Received: cat in1.txt | cat
+
+...server is waiting...
+ Received Buffer: CTL d
+Closed write end of stdin pipe
