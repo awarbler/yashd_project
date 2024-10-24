@@ -37,7 +37,7 @@ void cleanup(char *buf)
 // Signal handler to manage ctrl c and ctrl z signals 
 void sig_handler(int signo) {
     char ctl_msg[BUFFER_SIZE] = {0};    // Buffer for control message
-    if (signo ==SIGINT) {
+    if (signo == SIGINT) {
         snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // Send ctl c for ctrl-c
     } else if (signo == SIGTSTP) {
         snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // Send ctl z for ctrl-z
@@ -54,9 +54,8 @@ void sig_handler(int signo) {
 void send_command_to_server(const char *command) {
 
     pthread_mutex_lock(&lock); // wrap CS in lock ...
-    promptMode = 0;
-    pthread_mutex_unlock(&lock); // ... unlock
-
+    //promptMode = 0;
+    
     //printf("before send command: %d\n", promptMode); // display prompt
     fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
@@ -64,25 +63,27 @@ void send_command_to_server(const char *command) {
     cleanup(message); // clear the buffer
 
     // debuggin output: check what is being sent
-    // printf("client sending command: %s\n", command);
+    printf("Client sending command: %s\n", command);
 
     // split the command by spaces to handle redirection and pipes 
     // Use strtok to split the command
     char * command_copy = strdup(command);
     char *token = strtok(command_copy, " ");
    
-
     // Format the message to be sent to the server 
     snprintf(message, sizeof(message), "CMD %s\n", command);
 
     // Send the command to the server
     if (send(sockfd, message, strlen(message), 0) <0) {
         perror("Failed to send command");
-        return;
+        pthread_mutex_unlock(&lock); //  unlock before returning 
+        return; // exit the current function without affecting the rest of the client loop 
+        // if the send fails we would want the user to re-ejter the command or shut down.
     }
-
-    //printf("after send command: %d\n", promptMode); // display prompt
+    
     fflush(stdout);
+    free(command_copy);
+    pthread_mutex_unlock(&lock); // ... unlock
 }
 
 void* communication_thread(void *args){
@@ -100,7 +101,8 @@ void* communication_thread(void *args){
             pthread_exit(NULL);
         } else if (bytesRead == 0) {
             // server has closed the connection 
-            printf("server closed the connection \n");
+            printf("Server closed the connection \n");
+            close(sockfd);
             pthread_exit(NULL);
 
         } else {
@@ -180,10 +182,33 @@ int main(int argc, char *argv[]){
     printf("Connected to server at %s:%d\n", argv[1], PORT);
     // printf("# "); // display prompt
 
-    /* code */
+   
     char command[BUFFER_SIZE] = {0}; // buffer for user input 
+    // Main loop to send commands and receive responses
+while (1) {
+    cleanup(command); // Clear the command buffer
 
-    // main loop to send commands and receive responses
+    // Read command input from the user 
+    if (fgets(command, sizeof(command), stdin) == NULL) {
+        if (feof(stdin)) {
+            printf("Client terminating....\n");
+            // Send a disconnect signal to the server
+            if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
+                perror("Failed to send control-d signal");
+            }
+            shutdown(sockfd, SHUT_RDWR); // Graceful shutdown
+            break;
+        } else {
+            perror("Error reading command");
+            break;
+        }
+    }
+    fflush(stdout);
+    send_command_to_server(command); // Send the command to the server
+}
+
+
+   /*// main loop to send commands and receive responses
     while (1) {
         
         /*pthread_mutex_lock(&lock);
@@ -193,7 +218,7 @@ int main(int argc, char *argv[]){
             fflush(stdout);
             promptMode = 0;
         }
-        pthread_mutex_unlock(&lock);*/
+        pthread_mutex_unlock(&lock);
         cleanup(command); // clear the 
         
 
@@ -213,7 +238,7 @@ int main(int argc, char *argv[]){
         }
         fflush(stdout);
         send_command_to_server(command);
-    }
+    }*/
 
     close(sockfd);
     pthread_join(thread, NULL);

@@ -1,0 +1,38 @@
+Opening log file at path: ./tmp/yashd.log
+Writing to log file: cat
+Memore allocated for client arguments
+Thread created to serve client
+Server is waiting
+sent over to client prompt from s1
+...server is waiting...
+ CMD ls | wc
+
+Command: ls | wc
+Opening log file at path: ./tmp/yashd.log
+Writing to log file: ls
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ CMD ls -a 
+
+Command: ls -a 
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ Opening log file at path: ./tmp/yashd.log
+Writing to log file: ls
+CMD ls -a -l
+
+Command: ls -a -l
+Opening log file at path: ./tmp/yashd.log
+Writing to log file: ls
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ CMD ls -a -l -t -r
+
+Command: ls -a -l -t -r
+Opening log file at path: ./tmp/yashd.log
+Writing to log file: ls
+sent # to clients s4sent over to client  #3 
+...server is waiting...
+ CMD ls -a -l -t -r . | wc -c -L
+
+Command: ls -a -l -t -r . | wc -c -L
