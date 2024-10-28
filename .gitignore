@@ -2,8 +2,8 @@
 .DS_Store
 mock_server.c
 .txt
-yashShell.h
-yashShellHelpers.c
+yash_Shell.h
+yash_ShellHelpers.c
 
 
 # Prerequisites
