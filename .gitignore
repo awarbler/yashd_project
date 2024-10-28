@@ -1,6 +1,7 @@
 # ignore a specific file 
 .DS_Store
 mock_server.c
+.txt
 
 # Prerequisites
 *.d
