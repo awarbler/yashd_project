@@ -517,357 +517,353 @@ void *serveClient(void *args) {
     pthread_exit(NULL);
 }
 
+void reusePort(int s)
+{
+    int one = 1;
 
-    //}
-
-    void reusePort(int s)
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof(one)) == -1)
     {
-        int one = 1;
+        printf("error in setsockopt,SO_REUSEPORT \n");
+        exit(-1);
+    }
+}
+// function to handle piping
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd)
+{
+    int pipe_fd[2];
+    pid_t pid1, pid2;
 
-        if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof(one)) == -1)
-        {
-            printf("error in setsockopt,SO_REUSEPORT \n");
-            exit(-1);
-        }
+    if (pipe(pipe_fd) == -1)
+    {
+        // perror("yash");
+        return;
     }
 
-    // function to handle piping
-    void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd)
+    pid1 = fork(); // left child process
+    if (pid1 == 0)
     {
-        int pipe_fd[2];
-        pid_t pid1, pid2;
+        // first child left side command like ls
+        dup2(pipe_fd[1], STDOUT_FILENO); // redirect stdout to the pipe
+        printf("Redirect to to the pipe  pid1");
 
-        if (pipe(pipe_fd) == -1)
-        {
-            // perror("yash");
-            return;
-        }
-
-        pid1 = fork(); // left child process
-        if (pid1 == 0)
-        {
-            // first child left side command like ls
-            dup2(pipe_fd[1], STDOUT_FILENO); // redirect stdout to the pipe
-            printf("Redirect to to the pipe  pid1");
-
-            close(pipe_fd[0]);
-            close(pipe_fd[1]);
-
-            // apply redirection for the left
-            apply_redirections(cmd_args_left, psd);
-
-            if (execvp(cmd_args_left[0], cmd_args_left) == -1)
-            {
-                perror("execvp failed for the left pipe"); // debugging
-                exit(EXIT_FAILURE);
-                // return;
-            }
-        }
-
-        pid2 = fork(); // right sid of the pipe child process
-        if (pid2 == 0)
-        {
-
-            dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
-            // close both ends of hte pipe in the child
-            close(pipe_fd[1]);
-            close(pipe_fd[0]);
-
-            // apply redirection for right command
-            apply_redirections(cmd_args_right, psd);
-
-            if (execvp(cmd_args_right[0], cmd_args_right) == -1)
-            {
-                perror("execvp failed for the right pipe");
-                exit(EXIT_FAILURE);
-                // return;
-            }
-        }
-        // parent process closes pipe and waits for children to finish
         close(pipe_fd[0]);
         close(pipe_fd[1]);
 
-        waitpid(pid1, NULL, 0);
-        waitpid(pid2, NULL, 0);
+        // apply redirection for the left
+        apply_redirections(cmd_args_left, psd);
+
+        if (execvp(cmd_args_left[0], cmd_args_left) == -1)
+        {
+            perror("execvp failed for the left pipe"); // debugging
+            exit(EXIT_FAILURE);
+            // return;
+        }
     }
 
-    // signal handler for sigtstp ctrl z
-    void sigint_handler(int sig)
+    pid2 = fork(); // right sid of the pipe child process
+    if (pid2 == 0)
     {
-        if (fg_pid > 0)
+
+        dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
+        // close both ends of hte pipe in the child
+        close(pipe_fd[1]);
+        close(pipe_fd[0]);
+
+        // apply redirection for right command
+        apply_redirections(cmd_args_right, psd);
+
+        if (execvp(cmd_args_right[0], cmd_args_right) == -1)
         {
-            // if there is a foreground process , send sigint to it
-            kill(fg_pid, SIGINT);
+            perror("execvp failed for the right pipe");
+            exit(EXIT_FAILURE);
+            // return;
+        }
+    }
+    // parent process closes pipe and waits for children to finish
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+}
+
+// signal handler for sigtstp ctrl z
+void sigint_handler(int sig)
+{
+    if (fg_pid > 0)
+    {
+        // if there is a foreground process , send sigint to it
+        kill(fg_pid, SIGINT);
+    }
+
+    // write(STDOUT_FILENO, "\n", 1);
+
+    // write(STDOUT_FILENO, "# ", 2);
+    //  handle ctrz z prevent stopping the shell
+    // printf("\nCaught SIGINT(Ctrl-C), but the shell is not stopped.\n#" );
+    write(STDOUT_FILENO, "\n# ", 3);
+    // tcflush(STDIN_FILENO, TCIFLUSH);
+    fflush(stdout); // ensure the prompt is displayed immediately after the message
+}
+
+// signal handler for sigtstp ctrl z
+void sigtstp_handler(int sig)
+{
+    if (fg_pid > 0)
+    {
+        // if there is a foreground process , send sigint to it
+        kill(fg_pid, SIGTSTP);
+
+        // find the command associat with the foreground process and add it
+        for (int i = 0; i < job_count; i++)
+        {
+            if (jobs[i].pid == fg_pid)
+            {
+                jobs[i].is_running = 0;
+                // printf("\n[%d]      Stopped %s\n" ,jobs[i].job_id, jobs[i].command);
+                break;
+            }
         }
 
-        // write(STDOUT_FILENO, "\n", 1);
+        fg_pid = -1; // clear the foreground process
 
+        // reprint the print
+        // took these out becaue I didnt need a two new prompt lines
         // write(STDOUT_FILENO, "# ", 2);
-        //  handle ctrz z prevent stopping the shell
-        // printf("\nCaught SIGINT(Ctrl-C), but the shell is not stopped.\n#" );
-        write(STDOUT_FILENO, "\n# ", 3);
         // tcflush(STDIN_FILENO, TCIFLUSH);
+        // printf("# ");
         fflush(stdout); // ensure the prompt is displayed immediately after the message
     }
+}
 
-    // signal handler for sigtstp ctrl z
-    void sigtstp_handler(int sig)
+// signal handler for sigtstp ctrl z
+void sigchld_handler(int sig)
+{
+    int status;
+    pid_t pid;
+    // Clean up zombie child processes non blocking wait
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
     {
-        if (fg_pid > 0)
+        for (int i = 0; i < job_count; i++)
         {
-            // if there is a foreground process , send sigint to it
-            kill(fg_pid, SIGTSTP);
-
-            // find the command associat with the foreground process and add it
-            for (int i = 0; i < job_count; i++)
+            if (jobs[i].pid == pid)
             {
-                if (jobs[i].pid == fg_pid)
+                if (WIFEXITED(status) || WIFSIGNALED(status))
                 {
-                    jobs[i].is_running = 0;
-                    // printf("\n[%d]      Stopped %s\n" ,jobs[i].job_id, jobs[i].command);
-                    break;
-                }
-            }
-
-            fg_pid = -1; // clear the foreground process
-
-            // reprint the print
-            // took these out becaue I didnt need a two new prompt lines
-            // write(STDOUT_FILENO, "# ", 2);
-            // tcflush(STDIN_FILENO, TCIFLUSH);
-            // printf("# ");
-            fflush(stdout); // ensure the prompt is displayed immediately after the message
-        }
-    }
-
-    // signal handler for sigtstp ctrl z
-    void sigchld_handler(int sig)
-    {
-        int status;
-        pid_t pid;
-        // Clean up zombie child processes non blocking wait
-        while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-        {
-            for (int i = 0; i < job_count; i++)
-            {
-                if (jobs[i].pid == pid)
-                {
-                    if (WIFEXITED(status) || WIFSIGNALED(status))
+                    // print done messageif needed
+                    printf("\n[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
+                    // remove the job from the job list
+                    for (int j = i; j < job_count - 1; j++)
                     {
-                        // print done messageif needed
-                        printf("\n[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
-                        // remove the job from the job list
-                        for (int j = i; j < job_count - 1; j++)
-                        {
-                            jobs[j] = jobs[j + 1];
-                        }
-                        job_count--;
+                        jobs[j] = jobs[j + 1];
                     }
-                    break;
+                    job_count--;
                 }
+                break;
             }
         }
     }
+}
 
-    void apply_redirections(char **cmd_args, int psd)
+void apply_redirections(char **cmd_args, int psd)
+{
+    int i = 0;
+    int in_fd = -1, out_fd = -1, err_fd = -1;
+
+    while (cmd_args[i] != NULL)
     {
-        int i = 0;
-        int in_fd = -1, out_fd = -1, err_fd = -1;
-
-        while (cmd_args[i] != NULL)
+        if (strcmp(cmd_args[i], "<") == 0)
         {
-            if (strcmp(cmd_args[i], "<") == 0)
+
+            in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection
+            if (in_fd < 0)
             {
-
-                in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection
-                if (in_fd < 0)
-                {
-                    cmd_args[i] = NULL;
-                    // cmd_args[i - 1] = NULL;
-                    perror("yash");
-                    exit(EXIT_FAILURE); // exit child process on failure
-                    // return;
-                }
-
-                dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
-                close(in_fd);
-
-                // shift arguements left to remove redirecton operator and file name
-                // doing this because err1.txt and err2.txt are not getting created for redirection
-                for (int j = i; cmd_args[j + 2] != NULL; j++)
-                {
-                    cmd_args[j] = cmd_args[j + 2];
-                }
-                // shift remaing arguments
-                cmd_args[i] = NULL; // remove <
-                // cmd_args[i + 1] = NULL; // remove the file name
-                i--; // adjust index to recheck this position
-            }
-            else if (strcmp(cmd_args[i], ">") == 0)
-            {
-                // output direction
-                out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-                if (out_fd < 0)
-                {
-                    perror("yash");
-                    exit(EXIT_FAILURE);
-                    // return;
-                }
-                // debugging
-                printf("redirection output file : %s\n", cmd_args[i + 1]);
-
-                dup2(out_fd, STDOUT_FILENO);
-                close(out_fd);
-
-                // shift arguements left to remove redirecton operator and file name
-                // doing this because err1.txt and err2.txt are not getting created for redirection
-                for (int j = i; cmd_args[j + 2] != NULL; j++)
-                {
-                    cmd_args[j] = cmd_args[j + 2];
-                }
-
                 cmd_args[i] = NULL;
-                // cmd_args[i + 1] = NULL;
-                i--;
+                // cmd_args[i - 1] = NULL;
+                perror("yash");
+                exit(EXIT_FAILURE); // exit child process on failure
+                // return;
             }
-            else if (strcmp(cmd_args[i], "2>") == 0)
-            {
-                // error redirection
-                err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-                if (err_fd < 0)
-                {
-                    perror("yash");
-                    exit(EXIT_FAILURE);
-                    // return;
-                }
-                // printf("redirection output file : %s\n" , cmd_args[i+1]);
-                dup2(err_fd, STDERR_FILENO);
-                close(err_fd);
 
-                // shift arguements left to remove redirecton operator and file name
-                // doing this because err1.txt and err2.txt are not getting created for redirection
-                for (int j = i; cmd_args[j + 2] != NULL; j++)
-                {
-                    cmd_args[j] = cmd_args[j + 2];
-                }
-                cmd_args[i] = NULL;
-                // cmd_args[i + 1] = NULL;
-                i--;
+            dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
+            close(in_fd);
+
+            // shift arguements left to remove redirecton operator and file name
+            // doing this because err1.txt and err2.txt are not getting created for redirection
+            for (int j = i; cmd_args[j + 2] != NULL; j++)
+            {
+                cmd_args[j] = cmd_args[j + 2];
             }
+            // shift remaing arguments
+            cmd_args[i] = NULL; // remove <
+            // cmd_args[i + 1] = NULL; // remove the file name
+            i--; // adjust index to recheck this position
+        }
+        else if (strcmp(cmd_args[i], ">") == 0)
+        {
+            // output direction
+            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+            if (out_fd < 0)
+            {
+                perror("yash");
+                exit(EXIT_FAILURE);
+                // return;
+            }
+            // debugging
+            printf("redirection output file : %s\n", cmd_args[i + 1]);
+
+            dup2(out_fd, STDOUT_FILENO);
+            close(out_fd);
+
+            // shift arguements left to remove redirecton operator and file name
+            // doing this because err1.txt and err2.txt are not getting created for redirection
+            for (int j = i; cmd_args[j + 2] != NULL; j++)
+            {
+                cmd_args[j] = cmd_args[j + 2];
+            }
+
+            cmd_args[i] = NULL;
+            // cmd_args[i + 1] = NULL;
+            i--;
+        }
+        else if (strcmp(cmd_args[i], "2>") == 0)
+        {
+            // error redirection
+            err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+            if (err_fd < 0)
+            {
+                perror("yash");
+                exit(EXIT_FAILURE);
+                // return;
+            }
+            // printf("redirection output file : %s\n" , cmd_args[i+1]);
+            dup2(err_fd, STDERR_FILENO);
+            close(err_fd);
+
+            // shift arguements left to remove redirecton operator and file name
+            // doing this because err1.txt and err2.txt are not getting created for redirection
+            for (int j = i; cmd_args[j + 2] != NULL; j++)
+            {
+                cmd_args[j] = cmd_args[j + 2];
+            }
+            cmd_args[i] = NULL;
+            // cmd_args[i + 1] = NULL;
+            i--;
+        }
+        i++;
+    }
+}
+
+/* my code befor change
+// check for a pipe and
+    char *pipe_position = strchr(original_cmd, '|');
+    if(pipe_position){
+        *pipe_position = '\0'; // split the input at |
+        char *cmd_left = strtok(original_cmd, '|');
+        char *cmd_right = strtok(NULL, '|');
+        // Parse both sides of the pipe into arguments
+        char *args_left[MAX_ARGS];
+        char *args_right[MAX_ARGS];
+        int i = 0; // parse both commands
+        args_left[i] = strtok(cmd_left, " ");
+
+        while (args_left[i] != NULL && i < MAX_ARGS - 1)
+        {
             i++;
+            args_left[i] = strtok(NULL, " ");
         }
-    }
+        args_left[i] = NULL;
 
-    /* my code befor change
-    // check for a pipe and
-        char *pipe_position = strchr(original_cmd, '|');
-        if(pipe_position){
-            *pipe_position = '\0'; // split the input at |
-            char *cmd_left = strtok(original_cmd, '|');
-            char *cmd_right = strtok(NULL, '|');
-            // Parse both sides of the pipe into arguments
-            char *args_left[MAX_ARGS];
-            char *args_right[MAX_ARGS];
-            int i = 0; // parse both commands
-            args_left[i] = strtok(cmd_left, " ");
+        i = 0;
+        args_right[i] = strtok(cmd_right, " ");
+        while (args_right[i] != NULL && i < MAX_ARGS - 1)
+        {
+            i++;
+            args_right[i] = strtok(NULL, " ");
+        }
 
-            while (args_left[i] != NULL && i < MAX_ARGS - 1)
-            {
-                i++;
-                args_left[i] = strtok(NULL, " ");
-            }
-            args_left[i] = NULL;
+        handle_pipe(args_left, args_right, psd);
+*/
+/*char *pipe_position = strchr(command, '|'); // Check if command has a pipe |
+            if (pipe_position != NULL) {
+                *pipe_position = '\0'; // split the input at |
 
-            i = 0;
-            args_right[i] = strtok(cmd_right, " ");
-            while (args_right[i] != NULL && i < MAX_ARGS - 1)
-            {
-                i++;
-                args_right[i] = strtok(NULL, " ");
-            }
+                char *cmd_left = command; // left part before the |
+                char *cmd_right = pipe_position + 1;
 
-            handle_pipe(args_left, args_right, psd);
-    */
-    /*char *pipe_position = strchr(command, '|'); // Check if command has a pipe |
-                if (pipe_position != NULL) {
-                    *pipe_position = '\0'; // split the input at |
+                // Parse both sides of the pipe into arguments
+                char *cmd_args_left[MAX_ARGS];
+                char *cmd_args_right[MAX_ARGS];
+                int i = 0;
+                cmd_args_left[i] = strtok(cmd_left, " ");
+                while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
+                    i++;
+                    cmd_args_left[i] = strtok(NULL, " ");
+                }
+                cmd_args_left[i] = NULL;
 
-                    char *cmd_left = command; // left part before the |
-                    char *cmd_right = pipe_position + 1;
+                i = 0;
+                cmd_args_right[i] = strtok(cmd_right, " ");
+                while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1)
+                {
+                    i++;
+                    cmd_args_right[i] = strtok(NULL, " ");
+                }
+                handle_pipe(cmd_args_left, cmd_args_right, psd);
+            }*/
 
-                    // Parse both sides of the pipe into arguments
-                    char *cmd_args_left[MAX_ARGS];
-                    char *cmd_args_right[MAX_ARGS];
-                    int i = 0;
-                    cmd_args_left[i] = strtok(cmd_left, " ");
-                    while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
-                        i++;
-                        cmd_args_left[i] = strtok(NULL, " ");
-                    }
-                    cmd_args_left[i] = NULL;
-
-                    i = 0;
-                    cmd_args_right[i] = strtok(cmd_right, " ");
-                    while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1)
-                    {
-                        i++;
-                        cmd_args_right[i] = strtok(NULL, " ");
-                    }
-                    handle_pipe(cmd_args_left, cmd_args_right, psd);
-                }*/
-
-    void validateCommand(const char *command, int psd)
+void validateCommand(const char *command, int psd)
+{
+    // check for invalid combinations lif fg & and fg | echo
+    if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
     {
-        // check for invalid combinations lif fg & and fg | echo
-        if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
-        {
-            // invalid combination, move to next line
-            const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
-            send(psd, errorMsg, strlen(errorMsg), 0);
-            return; // skp to the next iteration if no command was entered
-        }
-        // check if the user input is empty pressing enter without types anything
-        if (strlen(command) == 0)
-        {
-            const char *errorMsg = "No Command \n#";
-            send(psd, errorMsg, strlen(errorMsg), 0);
-            return; // skp to the next iteration if no command was entered
-        }
-        // handle jobs command
-        if (strcmp(command, "jobs") == 0)
-        {
-            // print_jobs();
-            send(psd, "\n# ", strlen("\n# "), 0);
-            return;
-        }
-        // check if input starts with a special character (<|> & and skip it if it does
-        if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&')
-        {
-            const char *errorMsg = "Invalid command: Commands cannot start with <>| or &\n# ";
-            send(psd, errorMsg, strlen(errorMsg), 0);
-            printf("\n");
-            return;
-        }
+        // invalid combination, move to next line
+        const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return; // skp to the next iteration if no command was entered
     }
-
-    int recData(int psd, char *buffer)
+    // check if the user input is empty pressing enter without types anything
+    if (strlen(command) == 0)
     {
-        int bytesRead = recv(psd, buffer, BUFFER_SIZE, 0);
-        if (bytesRead <= 0)
-        {
-            if (bytesRead == 0)
-            {
-                // connection closed by the client
-                printf("Connection closed by client");
-            }
-            else
-            {
-                perror("Error receiving stream message\n");
-            }
-            close(psd);
-            return -1;
-        }
-        buffer[bytesRead] = '\0';
-        printf("Received buffer: %s", buffer);
-        return bytesRead;
+        const char *errorMsg = "No Command \n#";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return; // skp to the next iteration if no command was entered
     }
+    // handle jobs command
+    if (strcmp(command, "jobs") == 0)
+    {
+        // print_jobs();
+        send(psd, "\n# ", strlen("\n# "), 0);
+        return;
+    }
+    // check if input starts with a special character (<|> & and skip it if it does
+    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&')
+    {
+        const char *errorMsg = "Invalid command: Commands cannot start with <>| or &\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        printf("\n");
+        return;
+    }
+}
+
+int recData(int psd, char *buffer)
+{
+    int bytesRead = recv(psd, buffer, BUFFER_SIZE, 0);
+    if (bytesRead <= 0)
+    {
+        if (bytesRead == 0)
+        {
+            // connection closed by the client
+            printf("Connection closed by client");
+        }
+        else
+        {
+            perror("Error receiving stream message\n");
+        }
+        close(psd);
+        return -1;
+    }
+    buffer[bytesRead] = '\0';
+    printf("Received buffer: %s", buffer);
+    return bytesRead;
+}
