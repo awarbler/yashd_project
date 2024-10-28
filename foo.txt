@@ -2,25 +2,12 @@ Opening log file at path: ./tmp/yashd.log
 sent # to clients s4sent over to client  #3 
 ...server is waiting...
  Writing to log file: ls
-Received Buffer: CMD ls -a -l -t -r
+Received Buffer: CMD ls | wc
 
-Command Received: ls -a -l -t -r
+Command Received: ls | wc
 Opening log file at path: ./tmp/yashd.log
-Writing to log file: ls
 sent # to clients s4sent over to client  #3 
 ...server is waiting...
- Received Buffer: CMD . ls
-
-Command Received: . ls
-sent # to clients s4sent over to client  #3 
-...server is waiting...
- Opening log file at path: ./tmp/yashd.log
-Writing to log file: .
-Received Buffer: CMD > ls
-
-Command Received: > ls
-
-
-...server is waiting...
- Received Buffer: CTL d
+ Writing to log file: ls
+Received Buffer: CTL d
 Closed write end of stdin pipe

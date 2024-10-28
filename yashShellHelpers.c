@@ -909,3 +909,289 @@ void handle_control(int psd, char control) {
         }
     }  
 }*/
+
+
+
+/* EDited for server storing her for now 
+void print_jobs() {
+    for (int i = 0; i < job_count; i++) {
+        char job_marker = (i == job_count -1 ) ? '+' : '-';
+        //if(jobs[i].is_running){
+        printf("[%d]%c %s %s\n", jobs[i].job_id, job_marker, jobs[i].is_running ? "Running" : "Stopped",  jobs[i].command);
+        //printf("[%d]%c %s %s\n", jobs[i].job_id, (i == job_count - 1) ? '+' : '-', jobs[i].is_running ? "Running" : "Stopped",  jobs[i].command);
+        //} else {
+        //printf("[%d] %c - stopped %s\n", jobs[i].job_id,job_marker, jobs[i].command);
+    }
+}
+
+void fg_job(int job_id) {
+    // Used from from Dr.Y book Page-45-49 
+    int status;
+
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id) {
+            fg_pid = jobs[i].pid;
+            
+            //jobs[i].is_running = 1; // mark as running 
+
+            printf("%s\n", jobs[i].command); // prints teh command when bringing to the foreground
+
+            fflush(stdout); //ensure teh command is printed immediately 
+            // brings the job to the foreground
+            kill(-jobs[i].pid, SIGCONT);// wait for the process to cont. the stopped proces
+    
+            waitpid(jobs[i].pid, &status, WUNTRACED); // wait for the process to finish or be stopped again 
+
+            fg_pid = -1; // no longer a fg process 
+
+            // update job status if it was stopped again 
+            if (WIFSTOPPED(status)){
+                jobs[i].is_running = 0; // mark a stopped 
+
+            } else {
+                // if the job finished remove it from the job list 
+                for (int j = i; j < job_count - 1; j++) {
+                    jobs[j] = jobs[j + 1 ];
+                }
+                job_count--;
+            }
+            
+             return;
+        }
+    }  
+    printf("Job not found\n");
+            //tcsetpgrp(STDIN_FILENO, getpgrp());
+            /*if(WIFSTOPPED(status)){
+                jobs[i].is_running = 0; // mark as stopped
+            } else {
+                // the child has terminated normally 
+                fg_pid = -1; // no longer a fg process  
+                // remove job from the list 
+                for (int j = i; j < job_count - 1; j++){
+                    jobs[j] = jobs[j + 1];
+                }*/
+                
+            
+            /*do
+            {
+                
+                waitpid(jobs[i].pgid, &status, WUNTRACED | WCONTINUED);
+                if(WIFSTOPPED(status)){
+                    // the child has terminated normally 
+                    fg_pid = -1; // no longer a fg process  
+                    // remove job from the list 
+                    for (int j = i; j < job_count - 1; j++){
+                        jobs[j] = jobs[j + 1];
+                    }
+                    job_count--;
+                    
+                } else if (WIFSIGNALED(status)) {
+                    // the child was killed by a signal
+                    printf(" Job [%d] was killed by a signal %d\n", jobs[i].job_id, WTERMSIG(status));
+                    fg_pid = -1; // no longer a fg process 
+                    // remove job from the list 
+                    for (int j = i; j < job_count - 1; j++){
+                        jobs[j] = jobs[j + 1];
+                    }
+                    job_count--;
+                } else if (WIFSTOPPED(status))
+                {
+                    // the chiled was stopped  
+                    jobs[i].is_running = 0; // mark as stopped if stopped agains
+                    printf(" Job [%d] was stopped by a signal %d\n", jobs[i].job_id, WSTOPSIG(status));
+                } else if (WIFCONTINUED(status))
+                {
+                    // the child continued  
+                    printf("jobs [%d] continued\n", jobs[i].job_id);
+                }   
+            } while (!WIFEXITED(status)&& !WIFSIGNALED(status));*/
+
+//}
+    
+
+
+void bg_job(int job_id) {
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id && !jobs[i].is_running) {
+            kill(-jobs[i].pid, SIGCONT);
+            jobs[i].is_running = 1;
+            printf("[%d] + %s &\n", jobs[i].job_id, jobs[i].command); // prints teh command when bringing to the foreground
+            return;
+        }
+    }
+    printf("Job not found or already running\n");
+}
+
+
+// function to execute the command by creating a child process using fork()
+void execute_command(char **cmd_args, char *original_cmd, int psd) {
+
+    pid_t pid;
+    //pid_t pid = fork(); // create a new process 
+    int status;
+    int pipefd[2];
+    ssize_t bytesRead;
+    char buffer[BUFFER_SIZE];
+    char results[BUFFER_SIZE];
+    int is_background = 0;
+    int pipefd_stdout[2] ={-1, -1};
+    int pipefd_stdin[2] = {-1, -1};
+
+    /*for (int i = 0; cmd_args[i]!= NULL; i++) {
+        if (strcmp(cmd_args[i], "&") == 0)
+        {
+            is_background = 1;
+            cmd_args[i] = NULL; // Remove & from the argument
+            break;
+        }
+    }
+
+    // Check if the last argument is & indicating a background job
+    for (int i = 0; cmd_args[i] != NULL; i++) {
+        if (strcmp(cmd_args[i], "&") == 0) {
+            is_background = 1;
+            cmd_args[i] = NULL; // Remove & from the argument list
+            break;
+        }
+    }
+
+    if (cmd_args == NULL || cmd_args[0] == NULL) {
+        perror("command arguments are invalid");
+        return;
+    }
+
+    if (cmd_args[0] == NULL)
+    {
+        perror("invalid command");
+        return;
+    }
+*/
+    // server Context
+   /*if (psd >= 0)
+    {
+        if (pipe(pipefd) == -1)
+        {
+            perror("PIPE error ");
+            return;
+        }
+    }*/
+
+    pid = fork();
+    if (pipe(pipefd) == -1)
+    {
+      perror("PIPE error ");
+      return;
+    }
+    
+    if (pid == 0) {
+
+        // Child process
+        // Redirect stdout and stderr to the pile
+        //apply_redirections(cmd_args);
+
+        // Child process
+        close(pipefd_stdout[0]); // Close the read end of the stdout pipe
+        close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
+        
+        dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+        dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+        dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+        
+        close(pipefd_stdout[1]);
+        close(pipefd_stdin[0]);
+        // socket if psd > 0
+        if (psd >= 0)
+        {
+            close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[1]);
+        }
+
+        setpgid(0,0); // Set a new process group with the child pid
+
+        //handle_redirection(cmd_args);
+        apply_redirections(cmd_args, psd);
+        
+        if (execvp(cmd_args[0], cmd_args) == -1){
+            perror("Invalid command or options");
+            printf("\n# "); //  print a newline for invalide commands
+            
+            exit(EXIT_FAILURE);
+        } 
+
+    } else if (pid < 0) {
+        // fork failed 
+        perror("Fork failed");
+        return;
+    } else if (pid > 0) {
+        // parent process 
+         // Fork failed
+        if (psd >= 0)
+        {
+            close(pipefd[0]);
+            close(pipefd[1]);
+        }
+        //setpgid(pid, pid); // set child process group id to its own pid 
+        int status;
+        waitpid(pid, &status, 0);
+
+        // Add job to job list and run in background 
+        if (is_background) {
+            
+            add_job(pid, original_cmd, 1, 1);
+            printf("[%d] %d\n", jobs[job_count - 1].job_id, jobs[job_count - 1].pid);
+        } else {
+            // Foreground job 
+
+            //  parent process
+            if (psd >= 0) {
+                close(pipefd[1]);
+
+                // Read from pipe and send to client
+                while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0)
+                {
+                    send(psd, buffer, bytesRead, 0);
+                }
+                close(pipefd[1]);
+                waitpid(pid, &status, 0);
+            } else {
+                fg_pid = pid;
+            add_job(pid, original_cmd, 1, is_background);
+            if (is_background){
+                // add_job(pid, original_cmd, 1, 1);
+                printf("[%d] %d\n", jobs[job_count - 1].job_id, jobs[job_count - 1].pid);
+            } else {
+                //fg_pid = pid;
+                //add_job(pid, original_cmd, 1, 0);
+                // Wait for the job to finish or be stopped
+                waitpid(pid, &status, WUNTRACED);
+
+                fg_pid = -1; // -1 Clears the foreground process 
+                // Return control of the terminal 
+                //tcsetpgrp(STDIN_FILENO, getpgrp());
+
+                // handles the case where the job was stopped 
+                if (WIFSTOPPED(status)) {
+                    // If the child wa stopped, mark it as stopped 
+                    // So we are placing a marker 
+                    jobs[job_count -1].is_running = 0;
+                    jobs[job_count -1].is_stopped = 1;
+                    printf("\n[%d]+  Stopped  %s\n", jobs[job_count - 1].job_id, jobs[job_count - 1].command);
+
+                    //printf("\n[%d]  - stopped %s\n", job_count , cmd_args[0]);
+                } else { 
+                    //fg_pid = -1; 
+                    //job_count--;
+                    // The job is completed, now remove it from the job list
+                    free(jobs[job_count - 1].command);
+                    job_count--;
+                    update_job_markers(job_count-1);
+                    }
+                }
+            }
+
+            
+        } 
+    }
+}
