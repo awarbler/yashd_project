@@ -35,7 +35,7 @@ void execute_command(char **cmd_args, char *original_cmd, int psd);
 void apply_redirections(char **cmd_args, int psd);
 void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);
 int checkPipe(char *command, int psd);
-
+void validatePipes(const char *command, int psd);
 
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
 void update_job_markers(int current_job_index) ;
@@ -372,6 +372,7 @@ void *serveClient(void *args) {
 
             // validateCommand
             validateCommand(command, psd);
+            validatePipes(command, psd);
 
             // Tokenize the command into arguements
             char *cmd_args[10];
@@ -527,65 +528,62 @@ void reusePort(int s)
         exit(-1);
     }
 }
-// function to handle piping
-void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd)
-{
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd){
     int pipe_fd[2];
     pid_t pid1, pid2;
+    char buffer[BUFFER_SIZE];
+    ssize_t bytesRead;
 
-    if (pipe(pipe_fd) == -1)
-    {
-        // perror("yash");
+    if (pipe(pipe_fd) == -1){
+        perror("pipe");
         return;
     }
 
-    pid1 = fork(); // left child process
-    if (pid1 == 0)
-    {
-        // first child left side command like ls
-        dup2(pipe_fd[1], STDOUT_FILENO); // redirect stdout to the pipe
-        printf("Redirect to to the pipe  pid1");
-
+    pid1 = fork(); // Left command
+    if (pid1 == 0) {
+        // First child (left side of the pipe)
+        dup2(pipe_fd[1], STDOUT_FILENO); // Redirect stdout to the pipe
         close(pipe_fd[0]);
         close(pipe_fd[1]);
 
-        // apply redirection for the left
+        // Apply redirection and execute left command
         apply_redirections(cmd_args_left, psd);
-
-        if (execvp(cmd_args_left[0], cmd_args_left) == -1)
-        {
-            perror("execvp failed for the left pipe"); // debugging
+        if (execvp(cmd_args_left[0], cmd_args_left) == -1) {
+            perror("execvp failed for the left side of the pipe");
             exit(EXIT_FAILURE);
-            // return;
         }
     }
 
-    pid2 = fork(); // right sid of the pipe child process
-    if (pid2 == 0)
-    {
-
-        dup2(pipe_fd[0], STDIN_FILENO); // redirect stdout to the pipe
-        // close both ends of hte pipe in the child
+    pid2 = fork(); // Right command
+    if (pid2 == 0) {
+        // Second child (right side of the pipe)
+        dup2(pipe_fd[0], STDIN_FILENO); // Redirect stdin to the pipe
         close(pipe_fd[1]);
         close(pipe_fd[0]);
 
-        // apply redirection for right command
+        // Apply redirection and execute right command
         apply_redirections(cmd_args_right, psd);
-
-        if (execvp(cmd_args_right[0], cmd_args_right) == -1)
-        {
-            perror("execvp failed for the right pipe");
+        if (execvp(cmd_args_right[0], cmd_args_right) == -1) {
+            perror("execvp failed for the right side of the pipe");
             exit(EXIT_FAILURE);
-            // return;
         }
     }
-    // parent process closes pipe and waits for children to finish
-    close(pipe_fd[0]);
-    close(pipe_fd[1]);
 
+    // Parent process closes pipe and waits for children to finish
+    close(pipe_fd[1]); // Close the write end of the pipe
+
+    // Read from the pipe and send output to the client socket
+    while ((bytesRead = read(pipe_fd[0], buffer, sizeof(buffer))) > 0) {
+        if (send(psd, buffer, bytesRead, 0) < 0) {
+            perror("Error sending output to client");
+        }
+    }
+
+    close(pipe_fd[0]); // Close the read end of the pipe
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
 }
+
 
 // signal handler for sigtstp ctrl z
 void sigint_handler(int sig)
@@ -754,6 +752,113 @@ void apply_redirections(char **cmd_args, int psd)
     }
 }
 
+
+
+void validateCommand(const char *command, int psd)
+{
+    // check for invalid combinations lif fg & and fg | echo
+    if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
+    {
+        // invalid combination, move to next line
+        const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return; // skp to the next iteration if no command was entered
+    }
+    // check if the user input is empty pressing enter without types anything
+    if (strlen(command) == 0)
+    {
+        const char *errorMsg = "No Command \n#";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return; // skp to the next iteration if no command was entered
+    }
+    // handle jobs command
+    if (strcmp(command, "jobs") == 0)
+    {
+        // print_jobs();
+        send(psd, "\n# ", strlen("\n# "), 0);
+        return;
+    }
+    // check if input starts with a special character (<|> & and skip it if it does
+    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&')
+    {
+        const char *errorMsg = "Invalid command: Commands cannot start with <>| or &\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        printf("\n");
+        return;
+    }
+
+    
+
+}
+
+int recData(int psd, char *buffer)
+{
+    int bytesRead = recv(psd, buffer, BUFFER_SIZE, 0);
+    if (bytesRead <= 0)
+    {
+        if (bytesRead == 0)
+        {
+            // connection closed by the client
+            printf("Connection closed by client");
+        }
+        else
+        {
+            perror("Error receiving stream message\n");
+        }
+        close(psd);
+        return -1;
+    }
+    buffer[bytesRead] = '\0';
+    printf("Received buffer: %s", buffer);
+    return bytesRead;
+}
+
+void validatePipes(const char *command, int psd)
+{
+    // Check for pipes in the command
+    char *pipe_position = strchr(command, '|');
+    if (pipe_position) {
+        // Split the command into left and right commands
+        *pipe_position = '\0';
+        char *cmd_left = command; // Left part before the pipe
+        char *cmd_right = pipe_position + 1; // Right part after the pipe
+
+        // Tokenize both left and right commands
+        char *cmd_args_left[MAX_ARGS];
+        char *cmd_args_right[MAX_ARGS];
+        int i = 0;
+
+        // Tokenize left part
+        cmd_args_left[i] = strtok(cmd_left, " ");
+        while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
+            i++;
+            cmd_args_left[i] = strtok(NULL, " ");
+        }
+        cmd_args_left[i] = NULL;
+
+        // Tokenize right part
+        i = 0;
+        cmd_args_right[i] = strtok(cmd_right, " ");
+        while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1) {
+            i++;
+            cmd_args_right[i] = strtok(NULL, " ");
+        }
+        cmd_args_right[i] = NULL;
+
+        // Handle piping by calling handle_pipe()
+        handle_pipe(cmd_args_left, cmd_args_right, psd);
+
+        // Send prompt after piping execution
+        send(psd, "\n# ", strlen("\n# "), 0);
+        return;
+    }
+
+    // No pipes detected, continue execution or validation
+    const char *errorMsg = "No pipes found in the command.\n#";
+    send(psd, errorMsg, strlen(errorMsg), 0);
+}
+
+
 /* my code befor change
 // check for a pipe and
     char *pipe_position = strchr(original_cmd, '|');
@@ -811,59 +916,3 @@ void apply_redirections(char **cmd_args, int psd)
                 }
                 handle_pipe(cmd_args_left, cmd_args_right, psd);
             }*/
-
-void validateCommand(const char *command, int psd)
-{
-    // check for invalid combinations lif fg & and fg | echo
-    if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
-    {
-        // invalid combination, move to next line
-        const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
-        send(psd, errorMsg, strlen(errorMsg), 0);
-        return; // skp to the next iteration if no command was entered
-    }
-    // check if the user input is empty pressing enter without types anything
-    if (strlen(command) == 0)
-    {
-        const char *errorMsg = "No Command \n#";
-        send(psd, errorMsg, strlen(errorMsg), 0);
-        return; // skp to the next iteration if no command was entered
-    }
-    // handle jobs command
-    if (strcmp(command, "jobs") == 0)
-    {
-        // print_jobs();
-        send(psd, "\n# ", strlen("\n# "), 0);
-        return;
-    }
-    // check if input starts with a special character (<|> & and skip it if it does
-    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&')
-    {
-        const char *errorMsg = "Invalid command: Commands cannot start with <>| or &\n# ";
-        send(psd, errorMsg, strlen(errorMsg), 0);
-        printf("\n");
-        return;
-    }
-}
-
-int recData(int psd, char *buffer)
-{
-    int bytesRead = recv(psd, buffer, BUFFER_SIZE, 0);
-    if (bytesRead <= 0)
-    {
-        if (bytesRead == 0)
-        {
-            // connection closed by the client
-            printf("Connection closed by client");
-        }
-        else
-        {
-            perror("Error receiving stream message\n");
-        }
-        close(psd);
-        return -1;
-    }
-    buffer[bytesRead] = '\0';
-    printf("Received buffer: %s", buffer);
-    return bytesRead;
-}
