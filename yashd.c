@@ -373,7 +373,7 @@ void *serveClient(void *args) {
             printf("Command Received: %s\n", command);
 
             // validateCommand
-            validateCommand(command, psd);
+            validateCommand(command, psd); // validation for debugging
             validatePipes(command, psd);
 
             // Tokenize the command into arguements
@@ -680,13 +680,16 @@ void apply_redirections(char **cmd_args, int psd)
             {
                 cmd_args[i] = NULL;
                 // cmd_args[i - 1] = NULL;
-                perror("yash");
+                perror("Redirection < failed yashd");
                 exit(EXIT_FAILURE); // exit child process on failure
                 // return;
             }
 
             dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
             close(in_fd);
+            // added 11.1.24 fix redirection
+            cmd_args[i] = NULL; // removed redirecton arguments from cmd_args
+            i--;
 
             // shift arguements left to remove redirecton operator and file name
             // doing this because err1.txt and err2.txt are not getting created for redirection
@@ -705,7 +708,7 @@ void apply_redirections(char **cmd_args, int psd)
             out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
             if (out_fd < 0)
             {
-                perror("yash");
+                perror("redirection > output failed");
                 exit(EXIT_FAILURE);
                 // return;
             }
@@ -732,7 +735,7 @@ void apply_redirections(char **cmd_args, int psd)
             err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
             if (err_fd < 0)
             {
-                perror("yash");
+                perror("redirection 2> failed");
                 exit(EXIT_FAILURE);
                 // return;
             }
@@ -859,6 +862,8 @@ void validatePipes(const char *command, int psd)
     const char *errorMsg = "No pipes found in the command.\n#";
     send(psd, errorMsg, strlen(errorMsg), 0);
 }
+
+
 
 
 /* my code befor change
