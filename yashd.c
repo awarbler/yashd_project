@@ -36,6 +36,7 @@ void apply_redirections(char **cmd_args, int psd);
 void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);
 int checkPipe(char *command, int psd);
 void validatePipes(const char *command, int psd);
+void validatePipes(const char *command, int psd);
 
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
 void update_job_markers(int current_job_index) ;
@@ -48,6 +49,7 @@ void remove_newLine(char *line);
 void run_in_background(char **cmd_args);
 void setup_signal_handlers();
 void handle_control(int psd, char control);
+
 
 
 /* create thread argument struct for logRequest() thread */
