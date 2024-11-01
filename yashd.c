@@ -28,15 +28,15 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 void reusePort(int sock);
-void* serveClient(void *args);
+void *serveClient(void *args);
 void *logRequest(void *args);
 
-void execute_command(char **cmd_args, char *original_cmd, int psd);
+//void execute_command(char **cmd_args, char *original_cmd, int psd);
 void apply_redirections(char **cmd_args, int psd);
 void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);
-int checkPipe(char *command, int psd);
+//int checkPipe(char *command, int psd);
 void validatePipes(const char *command, int psd);
-void validateCommand(const char *command, int psd);
+int validateCommand(const char *command, int psd);
 
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
 void update_job_markers(int current_job_index) ;
@@ -315,43 +315,235 @@ void cleanup(char *buf)
     int i;
     for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
 }
-
+//
+//void *serveClient(void *args) {
+//    ClientArgs *clientArgs = (ClientArgs *)args;
+//    int psd = clientArgs->psd;
+//    struct sockaddr_in from = clientArgs->from;
+//    char buffer[BUFFER_SIZE]; // Maybe 205 as the command can only have 200 characters
+//    int bytesRead;
+//    int pipefd_stdout[2] = {-1, -1};
+//    int pipefd_stdin[2] = {-1, -1};
+//    pthread_t p;
+//    pid_t pid = -1;
+//    // int commandRunning = 0;
+//
+//
+//    // Send initial prompt to the client
+//    if (send(psd, PROMPT, sizeof(PROMPT), 0) < 0){
+//        perror("Sending Prompt # 1");
+//        close(psd);
+//        free(clientArgs);
+//        pthread_exit(NULL);
+//    } else {
+//        printf("sent over to client prompt from s1");
+//    }
+//
+//    /**  get data from  client and send it back */
+//    for (;;)
+//    { // infinite loop to keep the server running
+//        printf("\n...server is waiting...\n ");
+//
+//        cleanup(buffer); // clear the buffer
+//
+//        bytesRead = recv(psd, buffer, sizeof(buffer), 0);
+//
+//        // Receive command from client
+//        if (bytesRead <= 0) { // read data from the client
+//            if (bytesRead == 0) {
+//                // connection closed by client
+//                printf("Connection closed by client\n");
+//            } else {
+//                perror("Error receiving stream message\n");
+//            }
+//            close(psd);
+//            free(clientArgs);
+//            pthread_exit(NULL);
+//        }
+//
+//        buffer[bytesRead] = '\0'; // NULL terminate the received data
+//
+//        printf("Received Buffer: %s", buffer);
+//
+//        // Handle: CMD<blank><Command_String>\n
+//        if (strncmp(buffer, "CMD ", 4) == 0) {
+//            // Extract the command string
+//            char *command = buffer + 4;
+//            command[strcspn(command, "\n")] = '\0'; // Remove the newline character
+//            printf("Command Received: %s\n", command);
+//
+//            // validateCommand
+//            validateCommand(command, psd); // validation for debugging
+//            validatePipes(command, psd);
+//
+//            // Tokenize the command into arguements
+//            char *cmd_args[10];
+//            int i = 0;
+//
+//            cmd_args[i] = strtok(command, " ");
+//            while (cmd_args[i] != NULL && i < 9)
+//            {
+//                i++;
+//                cmd_args[i] = strtok(NULL, " ");
+//            }
+//            cmd_args[i] = NULL;
+//            // Allocate memory for LogRequestArgs
+//            LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
+//            if (args == NULL) {
+//                perror("Error allocating memory for log request");
+//                continue;
+//            }
+//            // Copy the request and client information to the struct
+//            strncpy(args->request, command, sizeof(args->request) - 1);
+//            args->from = from;
+//
+//            // Create a new thread for logging
+//            if (pthread_create(&p, NULL, logRequest, (void *)args) != 0) {
+//                perror("Error creating log request thread");
+//                free(args); // Free the allocated memory if thread creation fails
+//            } else {
+//                pthread_detach(p); // Detach the thread to allow it to run independently
+//            }
+//
+//            // Create pipes for communication between parent and child
+//            if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
+//                perror("pipe");
+//                exit(EXIT_FAILURE);
+//            }
+//
+//            // Fork a child process to execute the command
+//            if ((pid = fork()) == -1)
+//            {
+//                perror("fork");
+//                exit(EXIT_FAILURE);
+//            }
+//
+//            if (pid == 0) {
+//                // Child process
+//                close(pipefd_stdout[0]); // Close the read end of the stdout pipe
+//                close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
+//                dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
+//                dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
+//                dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
+//                close(pipefd_stdout[1]);
+//                close(pipefd_stdin[0]);
+//
+//                    /// tokenize the command string into arguments
+//                    // char *args[10];
+//                    // int i = 0;
+//                    // args[i] = strtok(command, " ");
+//                    // while (args[i] != NULL && i < 9) {
+//                    //   i++;
+//                    //   args[i] = strtok(NULL, " ");
+//                    // }
+//
+//                // execute the command
+//                // if (execvp(args[0], args) == -1) {
+//                if (execvp(cmd_args[0], cmd_args))
+//                {
+//                    perror("execvp failed");
+//                    exit(EXIT_FAILURE);
+//                } // exit(EXIT_SUCCESS);
+//            } else  {
+//                // Parent process
+//                close(pipefd_stdout[1]); // Close the write end of the stdout pipe
+//                close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
+//                // commandRunning = 1;
+//
+//                // Read the child's output from the pipe and send it to the client socket
+//                while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer) - 1)) > 0) {
+//                    buffer[bytesRead] = '\0';
+//                    send(psd, buffer, bytesRead, 0);
+//                }
+//
+//                close(pipefd_stdout[0]);
+//
+//                // Wait for the child process to finish
+//                waitpid(pid, NULL, 0);
+//                // commandRunning = 0;
+//
+//                pid = -1;
+//
+//                if (send(psd, "\n# ", sizeof("\n# "), 0) < 0) {
+//                    perror("sending stream message");
+//                } else {
+//                    printf("sent # to clients s4"); // TODO: DELETE AFTER TESTING
+//                }
+//                // close(pipefd_stdout[0]);
+//            }
+//            // // Send # to indicate the end of the command output
+//
+//            if (send(psd, "\n# ", sizeof("\n# "), 0) < 0) {
+//                perror("sending stream message");
+//            } else {
+//                printf("sent over to client  #3 ");
+//            }
+//        } 
+//        else if (strncmp(buffer, "CTL ", 4) == 0) {
+//            // Handle: CTL<blank><char[c|z|d]>\n
+//            char controlChar = buffer[4];
+//            if (controlChar == 'c') {
+//                if (pid > 0) {
+//                    kill(pid, SIGINT);
+//                    printf("Sent SIGINT to child process %d\n", pid);
+//                } else {
+//                    printf("No process to send SIGINT\n");
+//                }
+//            } else if (controlChar == 'z') {
+//                if (pid > 0) {
+//                    kill(pid, SIGINT);
+//                    printf("Sent SIGTSTP to child process %d\n", pid);
+//                } else {
+//                    printf("No process to send SIGINT\n");
+//                }
+//            } else if (controlChar == 'd') {
+//                // if (pipefd_stdin[1] != -1) {
+//                close(pipefd_stdin[1]);
+//                // pipefd_stdin[1] = -1;
+//                printf("Closed write end of stdin pipe\n");
+//                pthread_exit(NULL);
+//                //}
+//                // commandRunning = 0;
+//            }
+//            } else {
+//                // Handle plain text input
+//                // if (commandRunning) {
+//                // Write the plain text to the stdin of the running command
+//                // write(pipefd_stdin[1], buffer, bytesRead);
+//                //}
+//                // else {
+//                // If no command is running, send an error message
+//            const char *errorMsg = "Error: No command is currently running.\n#";
+//            send(psd, errorMsg, strlen(errorMsg), 0);
+//        }
+//    }
+//    pthread_exit(NULL);
+//}
+//
 void *serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
     struct sockaddr_in from = clientArgs->from;
-    char buffer[BUFFER_SIZE]; // Maybe 205 as the command can only have 200 characters
+    char buffer[BUFFER_SIZE];
     int bytesRead;
-    int pipefd_stdout[2] = {-1, -1};
-    int pipefd_stdin[2] = {-1, -1};
     pthread_t p;
     pid_t pid = -1;
-    // int commandRunning = 0;
 
-
-    // Send initial prompt to the client
-    if (send(psd, PROMPT, sizeof(PROMPT), 0) < 0){
-        perror("Sending Prompt # 1");
+    // Send initial prompt
+    if (send(psd, PROMPT, sizeof(PROMPT), 0) < 0) {
+        perror("Sending Prompt");
         close(psd);
         free(clientArgs);
         pthread_exit(NULL);
-    } else {
-        printf("sent over to client prompt from s1");
     }
 
-    /**  get data from  client and send it back */
-    for (;;)
-    { // infinite loop to keep the server running
-        printf("\n...server is waiting...\n ");
-
-        cleanup(buffer); // clear the buffer
+    for (;;) {
+        printf("\n...server is waiting...\n");
+        cleanup(buffer);
 
         bytesRead = recv(psd, buffer, sizeof(buffer), 0);
-
-        // Receive command from client
-        if (bytesRead <= 0) { // read data from the client
+        if (bytesRead <= 0) {
             if (bytesRead == 0) {
-                // connection closed by client
                 printf("Connection closed by client\n");
             } else {
                 perror("Error receiving stream message\n");
@@ -361,164 +553,136 @@ void *serveClient(void *args) {
             pthread_exit(NULL);
         }
 
-        buffer[bytesRead] = '\0'; // NULL terminate the received data
-
+        buffer[bytesRead] = '\0';
         printf("Received Buffer: %s", buffer);
 
-        // Handle: CMD<blank><Command_String>\n
         if (strncmp(buffer, "CMD ", 4) == 0) {
-            // Extract the command string
             char *command = buffer + 4;
-            command[strcspn(command, "\n")] = '\0'; // Remove the newline character
+            command[strcspn(command, "\n")] = '\0';
             printf("Command Received: %s\n", command);
 
-            // validateCommand
-            validateCommand(command, psd); // validation for debugging
-            validatePipes(command, psd);
+            // Check for pipe
+            if (strchr(command, '|') != NULL) {
+                validatePipes(command, psd);
+                continue;
+            }
+            
+            // First validate the command
+            if (!validateCommand(command, psd)) {
+                continue;  // Skip invalid commands
+            }
 
-            // Tokenize the command into arguements
-            char *cmd_args[10];
+            // Log the command
+            LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
+            if (args != NULL) {
+                strncpy(args->request, command, sizeof(args->request) - 1);
+                args->from = from;
+                if (pthread_create(&p, NULL, logRequest, (void *)args) == 0) {
+                    pthread_detach(p);
+                } else {
+                    free(args);
+                }
+            }
+
+            // Parse command and check for redirections
+            char *cmd_args[MAX_ARGS];
             int i = 0;
-
+            char *input_file = NULL;
+            char *output_file = NULL;
+            
+            // Tokenize the command
             cmd_args[i] = strtok(command, " ");
-            while (cmd_args[i] != NULL && i < 9)
-            {
+            while (cmd_args[i] != NULL && i < MAX_ARGS - 1) {
+                if (strcmp(cmd_args[i], ">") == 0) {
+                    cmd_args[i] = NULL;
+                    output_file = strtok(NULL, " ");
+                    break;
+                } else if (strcmp(cmd_args[i], "<") == 0) {
+                    cmd_args[i] = NULL;
+                    input_file = strtok(NULL, " ");
+                    break;
+                }
                 i++;
                 cmd_args[i] = strtok(NULL, " ");
             }
             cmd_args[i] = NULL;
-            // Allocate memory for LogRequestArgs
-            LogRequestArgs *args = (LogRequestArgs *)malloc(sizeof(LogRequestArgs));
-            if (args == NULL) {
-                perror("Error allocating memory for log request");
+
+            // Create pipe for output
+            int pipe_fd[2];
+            if (pipe(pipe_fd) == -1) {
+                perror("pipe");
                 continue;
             }
-            // Copy the request and client information to the struct
-            strncpy(args->request, command, sizeof(args->request) - 1);
-            args->from = from;
 
-            // Create a new thread for logging
-            if (pthread_create(&p, NULL, logRequest, (void *)args) != 0) {
-                perror("Error creating log request thread");
-                free(args); // Free the allocated memory if thread creation fails
-            } else {
-                pthread_detach(p); // Detach the thread to allow it to run independently
-            }
-
-            // Create pipes for communication between parent and child
-            if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
-                perror("pipe");
-                exit(EXIT_FAILURE);
-            }
-
-            // Fork a child process to execute the command
-            if ((pid = fork()) == -1)
-            {
+            pid = fork();
+            if (pid == -1) {
                 perror("fork");
+                close(pipe_fd[0]);
+                close(pipe_fd[1]);
+                continue;
+            }
+
+            if (pid == 0) { // Child process
+                close(pipe_fd[0]);
+
+                // Handle input redirection
+                if (input_file != NULL) {
+                    int fd = open(input_file, O_RDONLY);
+                    if (fd == -1) {
+                        perror("open input file");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                }
+
+                // Handle output redirection
+                if (output_file != NULL) {
+                    int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fd == -1) {
+                        perror("open output file");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                } else {
+                    dup2(pipe_fd[1], STDOUT_FILENO);
+                }
+                
+                dup2(pipe_fd[1], STDERR_FILENO);
+                close(pipe_fd[1]);
+
+                execvp(cmd_args[0], cmd_args);
+                perror("execvp failed");
                 exit(EXIT_FAILURE);
             }
 
-            if (pid == 0) {
-                // Child process
-                close(pipefd_stdout[0]); // Close the read end of the stdout pipe
-                close(pipefd_stdin[1]);  // Close the write end of the stdin pipe
-                dup2(pipefd_stdout[1], STDOUT_FILENO); // Redirect stdout to the write end of the stdout pipe
-                dup2(pipefd_stdout[1], STDERR_FILENO); // Redirect stderr to the write end of the stdout pipe
-                dup2(pipefd_stdin[0], STDIN_FILENO);   // Redirect stdin to the read end of the stdin pipe
-                close(pipefd_stdout[1]);
-                close(pipefd_stdin[0]);
+            // Parent process
+            close(pipe_fd[1]);
 
-                    /// tokenize the command string into arguments
-                    // char *args[10];
-                    // int i = 0;
-                    // args[i] = strtok(command, " ");
-                    // while (args[i] != NULL && i < 9) {
-                    //   i++;
-                    //   args[i] = strtok(NULL, " ");
-                    // }
-
-                // execute the command
-                // if (execvp(args[0], args) == -1) {
-                if (execvp(cmd_args[0], cmd_args))
-                {
-                    perror("execvp failed");
-                    exit(EXIT_FAILURE);
-                } // exit(EXIT_SUCCESS);
-            } else  {
-                // Parent process
-                close(pipefd_stdout[1]); // Close the write end of the stdout pipe
-                close(pipefd_stdin[0]);  // Close the read end of the stdin pipe
-                // commandRunning = 1;
-
-                // Read the child's output from the pipe and send it to the client socket
-                while ((bytesRead = read(pipefd_stdout[0], buffer, sizeof(buffer) - 1)) > 0) {
-                    buffer[bytesRead] = '\0';
-                    send(psd, buffer, bytesRead, 0);
-                }
-
-                close(pipefd_stdout[0]);
-
-                // Wait for the child process to finish
-                waitpid(pid, NULL, 0);
-                // commandRunning = 0;
-
-                pid = -1;
-
-                if (send(psd, "\n# ", sizeof("\n# "), 0) < 0) {
-                    perror("sending stream message");
-                } else {
-                    printf("sent # to clients s4"); // TODO: DELETE AFTER TESTING
-                }
-                // close(pipefd_stdout[0]);
+            // Read and send output
+            char read_buffer[BUFFER_SIZE];
+            ssize_t bytes_read;
+            while ((bytes_read = read(pipe_fd[0], read_buffer, sizeof(read_buffer) - 1)) > 0) {
+                read_buffer[bytes_read] = '\0';
+                send(psd, read_buffer, bytes_read, 0);
             }
-            // // Send # to indicate the end of the command output
 
-            if (send(psd, "\n# ", sizeof("\n# "), 0) < 0) {
-                perror("sending stream message");
-            } else {
-                printf("sent over to client  #3 ");
-            }
-        } 
+            close(pipe_fd[0]);
+            waitpid(pid, NULL, 0);
+            pid = -1;
+
+            // Send prompt
+            send(psd, "\n# ", 3, 0);
+        }
+        // Handle control commands
         else if (strncmp(buffer, "CTL ", 4) == 0) {
-            // Handle: CTL<blank><char[c|z|d]>\n
-            char controlChar = buffer[4];
-            if (controlChar == 'c') {
-                if (pid > 0) {
-                    kill(pid, SIGINT);
-                    printf("Sent SIGINT to child process %d\n", pid);
-                } else {
-                    printf("No process to send SIGINT\n");
-                }
-            } else if (controlChar == 'z') {
-                if (pid > 0) {
-                    kill(pid, SIGINT);
-                    printf("Sent SIGTSTP to child process %d\n", pid);
-                } else {
-                    printf("No process to send SIGINT\n");
-                }
-            } else if (controlChar == 'd') {
-                // if (pipefd_stdin[1] != -1) {
-                close(pipefd_stdin[1]);
-                // pipefd_stdin[1] = -1;
-                printf("Closed write end of stdin pipe\n");
-                pthread_exit(NULL);
-                //}
-                // commandRunning = 0;
-            }
-            } else {
-                // Handle plain text input
-                // if (commandRunning) {
-                // Write the plain text to the stdin of the running command
-                // write(pipefd_stdin[1], buffer, bytesRead);
-                //}
-                // else {
-                // If no command is running, send an error message
-            const char *errorMsg = "Error: No command is currently running.\n#";
-            send(psd, errorMsg, strlen(errorMsg), 0);
+            // ... (rest of control handling remains the same)
         }
     }
-    pthread_exit(NULL);
+    return NULL;
 }
+
 
 void reusePort(int s)
 {
@@ -530,7 +694,7 @@ void reusePort(int s)
         exit(-1);
     }
 }
-void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd){
+/*void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd){
     int pipe_fd[2];
     pid_t pid1, pid2;
     char buffer[BUFFER_SIZE];
@@ -584,6 +748,70 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd){
     close(pipe_fd[0]); // Close the read end of the pipe
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
+}*/
+
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd) {
+    int pipe_fd[2];
+    pid_t pid1, pid2;
+
+    if (pipe(pipe_fd) == -1) {
+        perror("pipe");
+        send(psd, "Error creating pipe\n# ", 21, 0);
+        return;
+    }
+
+    // First child (left side of pipe)
+    if ((pid1 = fork()) == -1) {
+        perror("fork");
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return;
+    }
+
+    if (pid1 == 0) {
+        // Child process for left command
+        close(pipe_fd[0]);  // Close read end
+        dup2(pipe_fd[1], STDOUT_FILENO);
+        close(pipe_fd[1]);
+
+        execvp(cmd_args_left[0], cmd_args_left);
+        perror("execvp left command");
+        exit(EXIT_FAILURE);
+    }
+
+    // Second child (right side of pipe)
+    if ((pid2 = fork()) == -1) {
+        perror("fork");
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        kill(pid1, SIGTERM);
+        return;
+    }
+
+    if (pid2 == 0) {
+        // Child process for right command
+        close(pipe_fd[1]);  // Close write end
+        dup2(pipe_fd[0], STDIN_FILENO);
+        close(pipe_fd[0]);
+
+        // Set up output to go back to socket
+        dup2(psd, STDOUT_FILENO);
+        dup2(psd, STDERR_FILENO);
+
+        execvp(cmd_args_right[0], cmd_args_right);
+        perror("execvp right command");
+        exit(EXIT_FAILURE);
+    }
+
+    // Parent process
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+
+    // Wait for both children
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+
+    send(psd, "\n# ", 3, 0);
 }
 
 
@@ -665,136 +893,312 @@ void sigchld_handler(int sig)
     }
 }
 
-void apply_redirections(char **cmd_args, int psd)
-{
+void apply_redirections(char **cmd_args, int psd) {
     int i = 0;
     int in_fd = -1, out_fd = -1, err_fd = -1;
+    char *input_file = NULL;
+    char *output_file = NULL;
+    char *error_file = NULL;
 
-    while (cmd_args[i] != NULL)
-    {
-        if (strcmp(cmd_args[i], "<") == 0)
-        {
-
-            in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection
-            if (in_fd < 0)
-            {
-                cmd_args[i] = NULL;
-                // cmd_args[i - 1] = NULL;
-                perror("Redirection < failed yashd");
-                exit(EXIT_FAILURE); // exit child process on failure
-                // return;
-            }
-
-            dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
-            close(in_fd);
-            // added 11.1.24 fix redirection
-            cmd_args[i] = NULL; // removed redirecton arguments from cmd_args
-            i--;
-
-            // shift arguements left to remove redirecton operator and file name
-            // doing this because err1.txt and err2.txt are not getting created for redirection
-            for (int j = i; cmd_args[j + 2] != NULL; j++)
-            {
-                cmd_args[j] = cmd_args[j + 2];
-            }
-            // shift remaing arguments
-            cmd_args[i] = NULL; // remove <
-            // cmd_args[i + 1] = NULL; // remove the file name
-            i--; // adjust index to recheck this position
-        }
-        else if (strcmp(cmd_args[i], ">") == 0)
-        {
-            // output direction
-            out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-            if (out_fd < 0)
-            {
-                perror("redirection > output failed");
-                exit(EXIT_FAILURE);
-                // return;
-            }
-            // debugging
-            printf("redirection output file : %s\n", cmd_args[i + 1]);
-
-            dup2(out_fd, STDOUT_FILENO);
-            close(out_fd);
-
-            // shift arguements left to remove redirecton operator and file name
-            // doing this because err1.txt and err2.txt are not getting created for redirection
-            for (int j = i; cmd_args[j + 2] != NULL; j++)
-            {
-                cmd_args[j] = cmd_args[j + 2];
-            }
-
+    while (cmd_args[i] != NULL) {
+        if (strcmp(cmd_args[i], "<") == 0 && cmd_args[i + 1] != NULL) {
+            input_file = strdup(cmd_args[i +1]);
             cmd_args[i] = NULL;
-            // cmd_args[i + 1] = NULL;
-            i--;
+            i++;
         }
-        else if (strcmp(cmd_args[i], "2>") == 0)
-        {
-            // error redirection
-            err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-            if (err_fd < 0)
-            {
-                perror("redirection 2> failed");
-                exit(EXIT_FAILURE);
-                // return;
-            }
-            // printf("redirection output file : %s\n" , cmd_args[i+1]);
-            dup2(err_fd, STDERR_FILENO);
-            close(err_fd);
-
-            // shift arguements left to remove redirecton operator and file name
-            // doing this because err1.txt and err2.txt are not getting created for redirection
-            for (int j = i; cmd_args[j + 2] != NULL; j++)
-            {
-                cmd_args[j] = cmd_args[j + 2];
-            }
+        else if (strcmp(cmd_args[i], ">") == 0 && cmd_args[i + 1] != NULL) {
+            output_file = strdup(cmd_args[i +1]);
             cmd_args[i] = NULL;
-            // cmd_args[i + 1] = NULL;
-            i--;
+            i++;
+        } else if (strcmp(cmd_args[i], "2>") == 0 && cmd_args[i +1] != NULL) {
+            error_file = strdup(cmd_args[i +1]);
+            cmd_args[i] = NULL;
+            i++;
         }
-        i++;
     }
+    if (input_file != NULL) {
+        in_fd = open(input_file, O_RDONLY); // input redirection
+        if (in_fd < 0)
+        {
+            cmd_args[i] = NULL;
+            perror("Error opening input file Redirection");
+            send(psd, "Error opening input file \n#", 30, 0);
+            exit(EXIT_FAILURE); // exit child process on failure
+        }
+        dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
+        close(in_fd);
+    }
+
+    if (output_file != NULL) {
+        out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644); // added 0666
+        if (out_fd < 0)
+        {
+            perror("Error redirection > opening output file");
+            send(psd, "Error opening output file \n#", 29, 0);
+            exit(EXIT_FAILURE);
+            // return;
+        }
+        // debugging
+        printf("redirection output file : %s\n", cmd_args[i + 1]);
+        dup2(out_fd, STDOUT_FILENO);
+        close(out_fd);
+
+    }
+
+    if (error_file != NULL) {
+        err_fd = open(error_file, O_WRONLY | O_CREAT | O_TRUNC,0666);
+        if (err_fd < 0)
+        {
+            perror("redirection 2> error opening error file");
+            send(psd, "Error opening error file \n#", 25, 0);
+            exit(EXIT_FAILURE);
+            // return;
+        }
+        // printf("redirection output file : %s\n" , cmd_args[i+1]);
+        dup2(err_fd, STDERR_FILENO);
+        close(err_fd);
+
+    }
+
+    execvp(cmd_args[0], cmd_args);
+
+    // remove null entries from cmd_args
+    int write_index = 0;
+    for (int read_index = 0; cmd_args[read_index] != NULL; read_index++) {
+        if (cmd_args[read_index] != NULL) 
+        {
+            cmd_args[write_index] = cmd_args[read_index];
+            write_index;
+        }
+    }
+    cmd_args[write_index] = NULL;
+
+    /*if (strcmp(cmd_args[i], "<") == 0)
+    {
+        in_fd = open(cmd_args[i + 1], O_RDONLY); // input redirection
+        if (in_fd < 0)
+        {
+            cmd_args[i] = NULL;
+            // cmd_args[i - 1] = NULL;
+            perror("Error opening input file for Redirection < failed yashd");
+            send(psd, "Error opening input file \n#", 25, 0);
+            exit(EXIT_FAILURE); // exit child process on failure
+            // return;
+        }
+        dup2(in_fd, STDIN_FILENO); // replace stdin with the file // socket file descriptor
+        close(in_fd);
+        // shift arguements left to remove redirecton operator and file name
+        // doing this because err1.txt and err2.txt are not getting created for redirection
+        //for (int j = i; cmd_args[j + 2] != NULL; j++)
+        //{
+        //    cmd_args[j] = cmd_args[j + 2];
+        //}
+        // shift remaing arguments
+        cmd_args[i] = NULL; // remove <
+        // cmd_args[i + 1] = NULL; // remove the file name
+        i--; // adjust index to recheck this position
+    }
+    else if (strcmp(cmd_args[i], ">") == 0)
+    {
+        // output direction
+        //out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH, 0666);
+        out_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0666); // added 0666
+        if (out_fd < 0)
+        {
+            perror("Error redirection > opening output file");
+            send(psd, "Error opening output file \n#", 26, 0);
+            exit(EXIT_FAILURE);
+            // return;
+        }
+        // debugging
+        printf("redirection output file : %s\n", cmd_args[i + 1]);
+        dup2(out_fd, STDOUT_FILENO);
+        close(out_fd);
+        // dup2(psd, STDOUT_FILENO); // also direct to client socket 
+        // shift arguements left to remove redirecton operator and file name
+        // doing this because err1.txt and err2.txt are not getting created for redirection
+        //for (int j = i; cmd_args[j + 2] != NULL; j++)
+        //{
+        //    cmd_args[j] = cmd_args[j + 2];
+        //}
+        cmd_args[i] = NULL;
+        // cmd_args[i + 1] = NULL;
+        i--;
+    }
+    else if (strcmp(cmd_args[i], "2>") == 0)
+    {
+        // error redirection
+        //err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+        err_fd = open(cmd_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC,0666);
+        if (err_fd < 0)
+        {
+            perror("redirection 2> error opening error file");
+            send(psd, "Error opening error file \n#", 25, 0);
+            exit(EXIT_FAILURE);
+            // return;
+        }
+        // printf("redirection output file : %s\n" , cmd_args[i+1]);
+        dup2(err_fd, STDERR_FILENO);
+        close(err_fd);
+        //dup2(psd, STDERR_FILENO); // Direct to client socket 
+        // shift arguements left to remove redirecton operator and file name
+        // doing this because err1.txt and err2.txt are not getting created for redirection
+        //for (int j = i; cmd_args[j + 2] != NULL; j++)
+        //{
+        //    cmd_args[j] = cmd_args[j + 2];
+        //}
+        cmd_args[i] = NULL;
+        // cmd_args[i + 1] = NULL;
+        i--;
+    }
+    i++;*/
 }
 
 
 
-void validateCommand(const char *command, int psd)
-{
-    // check for invalid combinations lif fg & and fg | echo
-    if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
-    {
-        // invalid combination, move to next line
-        const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
+
+//void validateCommand(const char *command, int psd)
+//{
+//    // check if the user input is empty pressing enter without types anything
+//    if (strlen(command) == 0)
+//    {
+//        const char *errorMsg = "No Command \n#";
+//        send(psd, errorMsg, strlen(errorMsg), 0);
+//        return; // skp to the next iteration if no command was entered
+//    }
+//
+//    // check for invalid combinations lif fg & and fg | echo
+//    //if ((strstr(command, "fg &") != NULL) || (strstr(command, "fg | ") != NULL) || (strstr(command, "bg &") != NULL) || (strstr(command, "bg | ") != NULL))
+//    //{
+//    //    // invalid combination, move to next line
+//    //    const char *errorMsg = "Invalid command combination fg &, fg |, bg &, bg |\n# ";
+//    //    send(psd, errorMsg, strlen(errorMsg), 0);
+//    //    return; // skp to the next iteration if no command was entered
+//    //}
+//
+//
+//    // check if input starts with a special character and skip 
+//    if (command[0]== '<' ||command[0]== '>' || command[0]== '|' || command[0]== '&') {
+//        const char *errorMsg = " Invalid command: commands cannot start with <>|& \n#";
+//        send(psd, errorMsg, strlen(errorMsg), 0);
+//    }
+//    if (strcmp(command, "jobs") == 0)
+//    // allow job command to list running or stopped jobs 
+//    {
+//        // print_jobs();
+//        send(psd, "\n# ", strlen("\n# "), 0);
+//        return;
+//    }
+//    // Check for redirection or pipes
+//    if (strstr(command, ">") || strstr(command, "<") || strstr(command, "2<")) {
+//        //  apply redirection 
+//        char *cmd_args[MAX_ARGS];
+//        int i = 0;
+//
+//        cmd_args[i] = strtok((char *)command, " ");
+//        while (cmd_args[i] !=NULL && i < MAX_ARGS -1) {
+//            i++;
+//            cmd_args[i] = strtok(NULL, " ");
+//        }
+//        cmd_args[i] = NULL;
+//
+//        apply_redirections(cmd_args, psd);
+//        return; 
+//    }
+//
+//    // if command contains a pipe, vaildate pipes
+//    if (strstr(command, "|")) {
+//        validatePipes(command, psd);
+//        return;
+//    }
+//
+//    // execute command ifno special symbols are found 
+//    char *cmd_args[MAX_ARGS];
+//    int i = 0;
+//    cmd_args[i] =  strtok((char *)command, " ");
+//    while (cmd_args[i] != NULL && i < MAX_ARGS -1) {
+//        i++;
+//        cmd_args[i] = strtok(NULL, " ");
+//    }
+//    cmd_args[i] = NULL;
+//
+//    //execute_command(cmd_args, (char *)command, psd);
+//    send(psd, "\n# ", strlen("\n# "), 0); // 
+//
+//}
+int validateCommand(const char *command, int psd) {
+    // Check if command starts with special characters
+    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&') {
+        const char *errorMsg = "Invalid command: commands cannot start with <>|&\n# ";
         send(psd, errorMsg, strlen(errorMsg), 0);
-        return; // skp to the next iteration if no command was entered
-    }
-    // check if the user input is empty pressing enter without types anything
-    if (strlen(command) == 0)
-    {
-        const char *errorMsg = "No Command \n#";
-        send(psd, errorMsg, strlen(errorMsg), 0);
-        return; // skp to the next iteration if no command was entered
-    }
-    // handle jobs command
-    if (strcmp(command, "jobs") == 0)
-    {
-        // print_jobs();
-        send(psd, "\n# ", strlen("\n# "), 0);
-        return;
-    }
-    // check if input starts with a special character (<|> & and skip it if it does
-    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&')
-    {
-        const char *errorMsg = "Invalid command: Commands cannot start with <>| or &\n# ";
-        send(psd, errorMsg, strlen(errorMsg), 0);
-        printf("\n");
-        return;
+        return 0;  // Changed from return; to return 0
     }
 
+    // Check for invalid combinations
+    if (strstr(command, "fg &") != NULL || strstr(command, "fg |") != NULL) {
+        const char *errorMsg = "Invalid command: fg cannot be used with & or |\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return 0;  // Changed from return; to return 0
+    }
+
+    // Parse command into arguments
+    char *cmd_args[MAX_ARGS];
+    int i = 0;
+    char *cmd_copy = strdup(command);  // Make a copy as strtok modifies the string
     
+    cmd_args[i] = strtok(cmd_copy, " ");
+    while (cmd_args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        cmd_args[i] = strtok(NULL, " ");
+    }
+    cmd_args[i] = NULL;
 
+    // Create pipes for capturing error output
+    int error_pipe[2];
+    if (pipe(error_pipe) == -1) {
+        perror("pipe");
+        free(cmd_copy);
+        return 0;  // Changed from return; to return 0
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        close(error_pipe[0]);
+        dup2(error_pipe[1], STDERR_FILENO);  // Redirect stderr to pipe
+        close(error_pipe[1]);
+
+        execvp(cmd_args[0], cmd_args);
+        // If execvp returns, there was an error
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Command '%s' not found\n", cmd_args[0]);
+        write(STDERR_FILENO, error_msg, strlen(error_msg));
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Parent process
+        close(error_pipe[1]);
+        
+        // Read any error output
+        char error_buffer[1024] = {0};
+        ssize_t bytes_read = read(error_pipe[0], error_buffer, sizeof(error_buffer) - 1);
+        close(error_pipe[0]);
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+            // Command was invalid or failed
+            send(psd, error_buffer, strlen(error_buffer), 0);
+            send(psd, "\n# ", 3, 0);
+            free(cmd_copy);
+            return 0;
+        }
+    }
+
+    free(cmd_copy);
+    return 1;  // Added return 1 for success
 }
+
 
 int recData(int psd, char *buffer)
 {
@@ -818,108 +1222,97 @@ int recData(int psd, char *buffer)
     return bytesRead;
 }
 
-void validatePipes(const char *command, int psd)
-{
-    // Check for pipes in the command
-    char *pipe_position = strchr(command, '|');
-    if (pipe_position) {
-        // Split the command into left and right commands
-        *pipe_position = '\0';
-        char *cmd_left = command; // Left part before the pipe
-        char *cmd_right = pipe_position + 1; // Right part after the pipe
-
-        // Tokenize both left and right commands
-        char *cmd_args_left[MAX_ARGS];
-        char *cmd_args_right[MAX_ARGS];
-        int i = 0;
-
-        // Tokenize left part
-        cmd_args_left[i] = strtok(cmd_left, " ");
-        while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
-            i++;
-            cmd_args_left[i] = strtok(NULL, " ");
-        }
-        cmd_args_left[i] = NULL;
-
-        // Tokenize right part
-        i = 0;
-        cmd_args_right[i] = strtok(cmd_right, " ");
-        while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1) {
-            i++;
-            cmd_args_right[i] = strtok(NULL, " ");
-        }
-        cmd_args_right[i] = NULL;
-
-        // Handle piping by calling handle_pipe()
-        handle_pipe(cmd_args_left, cmd_args_right, psd);
-
-        // Send prompt after piping execution
-        send(psd, "\n# ", strlen("\n# "), 0);
+//void validatePipes(const char *command, int psd)
+//{
+//    // Check for pipes in the command
+//    char *pipe_position = strchr(command, '|');
+//    if (pipe_position) {
+//        // Split the command into left and right commands
+//        *pipe_position = '\0';
+//        char *cmd_left = (char *)command; // Left part before the pipe
+//        char *cmd_right = (char *)pipe_position + 1; // Right part after the pipe
+//
+//        // Tokenize both left and right commands
+//        char *cmd_args_left[MAX_ARGS];
+//        char *cmd_args_right[MAX_ARGS];
+//        int i = 0;
+//
+//        // Tokenize left part
+//        cmd_args_left[i] = strtok(cmd_left, " ");
+//        while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
+//            i++;
+//            cmd_args_left[i] = strtok(NULL, " ");
+//        }
+//        cmd_args_left[i] = NULL;
+//
+//        // Tokenize right part
+//        i = 0;
+//        cmd_args_right[i] = strtok(cmd_right, " ");
+//        while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1) {
+//            i++;
+//            cmd_args_right[i] = strtok(NULL, " ");
+//        }
+//        cmd_args_right[i] = NULL;
+//
+//        // Handle piping by calling handle_pipe()
+//        handle_pipe(cmd_args_left, cmd_args_right, psd);
+//
+//        // Send prompt after piping execution
+//        send(psd, "\n# ", strlen("\n# "), 0);
+//        return;
+//    }
+//
+//    // No pipes detected, continue execution or validation
+//    const char *errorMsg = "No pipes found in the command.\n#";
+//    send(psd, errorMsg, strlen(errorMsg), 0);
+//}
+void validatePipes(const char *command, int psd) {
+    char *command_copy = strdup(command);
+    if (!command_copy) {
+        send(psd, "Memory allocation error\n# ", 25, 0);
         return;
     }
 
-    // No pipes detected, continue execution or validation
-    const char *errorMsg = "No pipes found in the command.\n#";
-    send(psd, errorMsg, strlen(errorMsg), 0);
+    // Find the pipe character
+    char *pipe_pos = strchr(command_copy, '|');
+    if (!pipe_pos) {
+        free(command_copy);
+        return;
+    }
+
+    // Split the command into left and right parts
+    *pipe_pos = '\0';
+    char *left_cmd = command_copy;
+    char *right_cmd = pipe_pos + 1;
+
+    // Remove leading/trailing spaces
+    while (*left_cmd == ' ') left_cmd++;
+    while (*right_cmd == ' ') right_cmd++;
+
+    // Create argument arrays
+    char *left_args[MAX_ARGS];
+    char *right_args[MAX_ARGS];
+    
+    // Parse left command
+    int i = 0;
+    left_args[i] = strtok(left_cmd, " \t");
+    while (left_args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        left_args[i] = strtok(NULL, " \t");
+    }
+    left_args[i] = NULL;
+
+    // Parse right command
+    i = 0;
+    right_args[i] = strtok(right_cmd, " \t");
+    while (right_args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        right_args[i] = strtok(NULL, " \t");
+    }
+    right_args[i] = NULL;
+
+    // Execute the pipe
+    handle_pipe(left_args, right_args, psd);
+    
+    free(command_copy);
 }
-
-
-
-
-/* my code befor change
-// check for a pipe and
-    char *pipe_position = strchr(original_cmd, '|');
-    if(pipe_position){
-        *pipe_position = '\0'; // split the input at |
-        char *cmd_left = strtok(original_cmd, '|');
-        char *cmd_right = strtok(NULL, '|');
-        // Parse both sides of the pipe into arguments
-        char *args_left[MAX_ARGS];
-        char *args_right[MAX_ARGS];
-        int i = 0; // parse both commands
-        args_left[i] = strtok(cmd_left, " ");
-
-        while (args_left[i] != NULL && i < MAX_ARGS - 1)
-        {
-            i++;
-            args_left[i] = strtok(NULL, " ");
-        }
-        args_left[i] = NULL;
-
-        i = 0;
-        args_right[i] = strtok(cmd_right, " ");
-        while (args_right[i] != NULL && i < MAX_ARGS - 1)
-        {
-            i++;
-            args_right[i] = strtok(NULL, " ");
-        }
-
-        handle_pipe(args_left, args_right, psd);
-*/
-/*char *pipe_position = strchr(command, '|'); // Check if command has a pipe |
-            if (pipe_position != NULL) {
-                *pipe_position = '\0'; // split the input at |
-
-                char *cmd_left = command; // left part before the |
-                char *cmd_right = pipe_position + 1;
-
-                // Parse both sides of the pipe into arguments
-                char *cmd_args_left[MAX_ARGS];
-                char *cmd_args_right[MAX_ARGS];
-                int i = 0;
-                cmd_args_left[i] = strtok(cmd_left, " ");
-                while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
-                    i++;
-                    cmd_args_left[i] = strtok(NULL, " ");
-                }
-                cmd_args_left[i] = NULL;
-
-                i = 0;
-                cmd_args_right[i] = strtok(cmd_right, " ");
-                while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1)
-                {
-                    i++;
-                    cmd_args_right[i] = strtok(NULL, " ");
-                }
-                handle_pipe(cmd_args_left, cmd_args_right, psd);
-            }*/

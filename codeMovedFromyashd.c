@@ -265,6 +265,62 @@ void update_job_markers(int current_job_index) {
           }
 
 
+/* my code befor change
+// check for a pipe and
+    char *pipe_position = strchr(original_cmd, '|');
+    if(pipe_position){
+        *pipe_position = '\0'; // split the input at |
+        char *cmd_left = strtok(original_cmd, '|');
+        char *cmd_right = strtok(NULL, '|');
+        // Parse both sides of the pipe into arguments
+        char *args_left[MAX_ARGS];
+        char *args_right[MAX_ARGS];
+        int i = 0; // parse both commands
+        args_left[i] = strtok(cmd_left, " ");
 
+        while (args_left[i] != NULL && i < MAX_ARGS - 1)
+        {
+            i++;
+            args_left[i] = strtok(NULL, " ");
+        }
+        args_left[i] = NULL;
+
+        i = 0;
+        args_right[i] = strtok(cmd_right, " ");
+        while (args_right[i] != NULL && i < MAX_ARGS - 1)
+        {
+            i++;
+            args_right[i] = strtok(NULL, " ");
+        }
+
+        handle_pipe(args_left, args_right, psd);
+*/
+/*char *pipe_position = strchr(command, '|'); // Check if command has a pipe |
+            if (pipe_position != NULL) {
+                *pipe_position = '\0'; // split the input at |
+
+                char *cmd_left = command; // left part before the |
+                char *cmd_right = pipe_position + 1;
+
+                // Parse both sides of the pipe into arguments
+                char *cmd_args_left[MAX_ARGS];
+                char *cmd_args_right[MAX_ARGS];
+                int i = 0;
+                cmd_args_left[i] = strtok(cmd_left, " ");
+                while (cmd_args_left[i] != NULL && i < MAX_ARGS - 1) {
+                    i++;
+                    cmd_args_left[i] = strtok(NULL, " ");
+                }
+                cmd_args_left[i] = NULL;
+
+                i = 0;
+                cmd_args_right[i] = strtok(cmd_right, " ");
+                while (cmd_args_right[i] != NULL && i < MAX_ARGS - 1)
+                {
+                    i++;
+                    cmd_args_right[i] = strtok(NULL, " ");
+                }
+                handle_pipe(cmd_args_left, cmd_args_right, psd);
+            }*/
 
   

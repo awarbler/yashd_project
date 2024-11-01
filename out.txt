@@ -1,0 +1,17 @@
+Makefile
+README.md
+codeMovedFromyashd.c
+in1.txt
+in2.txt
+out.txt
+src
+tmp
+yash
+yash.c
+yash.o
+yash_Shell.h
+yash_ShellHelpers.c
+yashd
+yashd.c
+yashd.h
+yashd.o
