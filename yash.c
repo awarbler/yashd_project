@@ -63,7 +63,7 @@ void send_command_to_server(const char *command) {
     cleanup(message); // clear the buffer
 
     // debuggin output: check what is being sent
-    printf("Client sending command: %s\n", command);
+    printf("Client sending command: %s", command);
 
     // split the command by spaces to handle redirection and pipes 
     // Use strtok to split the command
