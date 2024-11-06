@@ -148,7 +148,94 @@ void update_job_markers(int current_job_index) {
         }
     }
 }
+void print_jobs() {
+    for (int i = 0; i < job_count; i++) {
+        char job_marker = jobs[i].job_marker;  // Use the stored marker for each job
+        printf("[%d]%c %s %s\n", jobs[i].job_id, job_marker, jobs[i].is_running ? "Running" : "Stopped", jobs[i].command);
+    }
+}
+void add_job(pid_t pid, const char *command, int is_running, int is_background) {
+    if (job_count < MAX_JOBS) {
+        // Set the job marker for the new job as '+' and others as '-'
+        for (int i = 0; i < job_count; i++) {
+            jobs[i].job_marker = '-';
+        }
 
+        jobs[job_count].pid = pid;
+        jobs[job_count].job_id = (job_count > 0) ? jobs[job_count - 1].job_id + 1 : 1;
+        jobs[job_count].command = strdup(command);
+        jobs[job_count].is_running = is_running;
+        jobs[job_count].is_background = is_background;
+        jobs[job_count].job_marker = '+';  // Most recent job gets '+'
+        job_count++;
+    } else {
+        printf("Job list is full\n");
+    }
+}
+void fg_job(int job_id) {
+    int status;
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id) {
+            fg_pid = jobs[i].pid;
+            printf("%s\n", jobs[i].command); // Print command like Bash does
+            fflush(stdout);
+            kill(jobs[i].pid, SIGCONT);
+            waitpid(jobs[i].pid, &status, WUNTRACED);
+            fg_pid = -1;
+
+            if (WIFSTOPPED(status)) {
+                jobs[i].is_running = 0;
+            } else {
+                // Remove completed job from the list
+                for (int j = i; j < job_count - 1; j++) {
+                    jobs[j] = jobs[j + 1];
+                }
+                job_count--;
+            }
+            update_job_markers(i);
+            return;
+        }
+    }
+    printf("Job not found\n");
+}
+
+void bg_job(int job_id) {
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id && !jobs[i].is_running) {
+            kill(jobs[i].pid, SIGCONT);
+            jobs[i].is_running = 1;
+            printf("[%d]%c %s &\n", jobs[i].job_id, jobs[i].job_marker, jobs[i].command);
+            update_job_markers(i);
+            return;
+        }
+    }
+    printf("Job not found or already running\n");
+}
+void bg_command(char **cmd_args) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        execvp(cmd_args[0], cmd_args);
+        perror("execvp failed");  // If execvp fails
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Parent process
+        add_job(pid, cmd_args[0], 1, 1);  // Mark as running and in background
+        update_job_markers(job_count - 1);
+    }
+}
+void update_job_markers(int current_job_index) {
+    for (int i = 0; i < job_count; i++) {
+        jobs[i].job_marker = ' ';
+    }
+    if (job_count > 0) {
+        jobs[job_count -1].job_marker = '+';
+
+        if (job_count > 1) {
+            jobs[job_count -2].job_marker = '-';
+        }
+    }
+}
 
   /* from the teachers code 
   // Redirecting stderr to u_log_path 
@@ -1197,31 +1284,31 @@ void cleanup(char *buf)
 //        } 
 //        else if (strncmp(buffer, "CTL ", 4) == 0) {
 //            // Handle: CTL<blank><char[c|z|d]>\n
-//            char controlChar = buffer[4];
-//            if (controlChar == 'c') {
-//                if (pid > 0) {
-//                    kill(pid, SIGINT);
-//                    printf("Sent SIGINT to child process %d\n", pid);
-//                } else {
-//                    printf("No process to send SIGINT\n");
-//                }
-//            } else if (controlChar == 'z') {
-//                if (pid > 0) {
-//                    kill(pid, SIGINT);
-//                    printf("Sent SIGTSTP to child process %d\n", pid);
-//                } else {
-//                    printf("No process to send SIGINT\n");
-//                }
-//            } else if (controlChar == 'd') {
-//                // if (pipefd_stdin[1] != -1) {
-//                close(pipefd_stdin[1]);
-//                // pipefd_stdin[1] = -1;
-//                printf("Closed write end of stdin pipe\n");
-//                pthread_exit(NULL);
-//                //}
-//                // commandRunning = 0;
-//            }
-//            } else {
+            char controlChar = buffer[4];
+            if (controlChar == 'c') {
+                if (pid > 0) {
+                    kill(pid, SIGINT);
+                    printf("Sent SIGINT to child process %d\n", pid);
+                } else {
+                    printf("No process to send SIGINT\n");
+                }
+            } else if (controlChar == 'z') {
+                if (pid > 0) {
+                    kill(pid, SIGINT);
+                    printf("Sent SIGTSTP to child process %d\n", pid);
+                } else {
+                    printf("No process to send SIGINT\n");
+                }
+            } else if (controlChar == 'd') {
+                // if (pipefd_stdin[1] != -1) {
+                close(pipefd_stdin[1]);
+                // pipefd_stdin[1] = -1;
+                printf("Closed write end of stdin pipe\n");
+                pthread_exit(NULL);
+                //}
+                // commandRunning = 0;
+            }
+            } else {
 //                // Handle plain text input
 //                // if (commandRunning) {
 //                // Write the plain text to the stdin of the running command
@@ -2124,3 +2211,27 @@ void receive_output_from_server(int sockfd) {
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
 }*/
+
+
+  if (fg_pid > 0) { 
+        for (int i = 0; i < job_count; i++) {
+            if (jobs[i].pid == fg_pid) {
+                jobs[i].is_running = 0;
+                jobs[i].is_stopped = 1;
+                break;
+            }
+        }
+        // clear the foreground process
+        fg_pid = -1;
+
+        // send a prompt to the cleint to indicate readiness for new input 
+        if(send(psd, PROMPT, strlen(PROMPT), 0) < 0) {
+            perror("Error sending prompt after ctrl z");
+        }
+        // Store the suspended process ID
+        sus_pid = fg_pid;
+
+        // Send a msg to the client indication process has been suspended
+        const char *msg = "Process suspended type fg to resume \n#  ";
+        send(psd, msg, strlen(msg), 0);
+    }
