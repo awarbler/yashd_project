@@ -2586,36 +2586,7 @@ void handle_job_command(const char *command, int psd) {
     }
 }
 
-void handle_redirection(char **cmd_args, int psd, char *input_file, char *output_file) {
-    int in_fd = -1, out_fd = -1;
-    // Input redirection
-    if (input_file != NULL) {
-        in_fd = open(input_file, O_RDONLY);
-        if (in_fd == -1) {
-            perror("open input file");
-            send(psd, "Error opening input file\n# ", 27, 0);
-            return;
-        }
-        dup2(in_fd, STDIN_FILENO);
-        close(in_fd);
-    }
-    // Output redirection
-    if (output_file != NULL) {
-        out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (out_fd == -1) {
-            perror("open output file");
-            send(psd, "Error opening output file\n# ", 28, 0);
-            return;
-        }
-        dup2(out_fd, STDOUT_FILENO);
-        close(out_fd);
-    }
-    // Execute the command
-    execvp(cmd_args[0], cmd_args);
-    perror("execvp failed");
-    send(psd, "Command execution failed\n# ", 28, 0);
-    exit(EXIT_FAILURE);
-}
+
 void parse_command(char *command, char **cmd_args) {
     int i = 0;
     cmd_args[i] = strtok(command, " ");

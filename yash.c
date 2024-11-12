@@ -23,6 +23,7 @@ void handle_sigint(int sig);
 void handle_sigtstp(int sig);
 void handle_sigquit(int sig);
 void cleanup(char *buf);
+void handle_cat_client(const char *command);
 
 char buffer[BUFFER_SIZE];
 char rbuf[BUFFER_SIZE];
@@ -111,7 +112,6 @@ int main(int argc, char *argv[]){
     
     return 0;
 }
-
 void GetUserInput()
 {
     char *input = NULL;
@@ -151,9 +151,17 @@ void send_command_to_server(const char *command) {
     fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
-    cleanup(message); // clear the buffer
-    // debuggin output: check what is being sent
+    cleanup(message); // Clear the buffer
+
+    // Debuggin output: check what is being sent
     printf("Client sending command: %s\n", command);
+
+    // Check for cat > 
+    if (strncmp(command, "cat >", 5) == 0) {
+        pthread_mutex_unlock(&lock);
+        handle_cat_client(command);
+        return;
+    }
 
     // split the command by spaces to handle redirection and pipes 
     // Use strtok to split the command
@@ -174,7 +182,6 @@ void send_command_to_server(const char *command) {
     free(command_copy);
     pthread_mutex_unlock(&lock); // ... unlock
 }
-
 void* communication_thread(void *args){
     // buffer for receiving response
     char buf[BUFFER_SIZE] = {0};
@@ -245,7 +252,6 @@ void handle_sigint(int sig) {
     }
     pthread_mutex_unlock(&lock);
 }
-
 // Signal handler for Ctrl+Z (SIGTSTP)
 void handle_sigtstp(int sig) {
     printf("\nSending Ctrl+Z (SIGTSTP) to server...\n");
@@ -265,4 +271,45 @@ void handle_sigquit(int sig) {
     pthread_mutex_unlock(&lock);
     close(sockfd);
     exit(0);
+}
+void handle_cat_client(const char *command) {
+    pthread_mutex_lock(&lock); // Lock for thread safety 
+    char message[BUFFER_SIZE] = {0};
+
+    // Check to see if command starts with cat >
+    if (strncmp(command, "cat >", 5) == 0) {
+        // Send the cat command to the server 
+        snprintf(message, sizeof(message), "CMD %s", command);
+        if (send(sockfd, message, strlen(message), 0) < 0) {
+            perror("Failed to send cat command");
+            pthread_mutex_unlock(&lock);
+            return;
+        }
+    }
+
+    printf("Enter text and end with Ctrl+D:\n");
+    // Enter a special input mode for the cat > command 
+    while (fgets(message, sizeof(message), stdin) != NULL) {
+        // Check for conrol d eof
+        if (feof(stdin)) {
+            break;
+        }
+        // Send the input directly to the server 
+        if (send(sockfd, message, strlen(message), 0) < 0) {
+            perror("Failed to send input for cat command");
+            pthread_mutex_unlock(&lock);
+            return;
+        }
+    }
+    // Notify the server that input is complete by sending control d eof 
+    char eof_signal = 4; // ASCII code for control d 
+    if (send(sockfd, &eof_signal, 1, 0) < 0) {
+        perror("Failed to send EOF signal");
+    }
+    // Request a new prompt after file input is complete 
+    if (send(sockfd, "CMD \n", 5, 0) < 0) {
+        perror("Failed to request new prompt.");
+    }
+    printf("File inpute complete.\n#");
+    pthread_mutex_unlock(&lock);
 }

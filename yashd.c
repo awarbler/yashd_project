@@ -55,6 +55,7 @@ void sig_pipe(int n) ;
 void setup_signal_handlers();
 
 void handle_control(int psd, char control, pid_t pid);
+void handle_cat_command(const char *command, int psd);
 
 
 /* create thread argument struct for logRequest() thread */
@@ -255,6 +256,7 @@ int main(int argc, char **argv ) {
     pthread_mutex_destroy(&lock);// Destroy the mutex at the end
     return 0;
 }
+
 void *serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
@@ -296,6 +298,13 @@ void *serveClient(void *args) {
             char *command = buffer + 4;
             command[strcspn(command, "\n")] = '\0';
             printf("Command Received: %s\n", command);
+
+            // Check if command is cat > filename
+            if (strncmp(command, "cat > ", 5) == 0) {
+                // call the handle cat function 
+                handle_cat_command(command, psd);
+                continue; // Skip and wait for next command
+            }
 
             // Handle job commands fg bg and & 
 
@@ -888,6 +897,11 @@ void bg_job(int job_id) {
 //    dprintf(psd, "job not found\n");
 //    printf("Job not found\n");
 //}
+//    
+//
+//
+
+//
 //void bg_command(char **cmd_args) {
 //    pid_t pid = fork();
 //    if (pid == 0) {
@@ -901,6 +915,7 @@ void bg_job(int job_id) {
 //        update_job_markers(job_count - 1);
 //    }
 //}
+//
 //void update_job_markers(int current_job_index) {
 //    for (int i = 0; i < job_count; i++) {
 //        //jobs[i].job_marker = ' ';
@@ -1141,4 +1156,54 @@ void handle_control(int psd, char control, pid_t pid) {
         const char *errorMsg = "Error: No command is currently running.\n#";
         send(psd, errorMsg, strlen(errorMsg), 0);
     }
+}
+
+void handle_cat_command(const char *command, int psd) {
+    // Extract file name after cat >
+    char *filename = strtok(command + 5, " ");
+    
+    if (filename == NULL) {
+        const char *errorMsg = " Error: no filename provided for redirection\n# ";// debugging No filename provide
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return;
+    }
+    // Open the specified file in write mode or create one
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        perror("open output file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Notify the client to start typing input and end with control d 
+    const char *inputMsg = "Start typing input and end with Ctrl+D:\n";
+    send(psd, inputMsg, strlen(inputMsg), 0);
+
+    // Buffer to hold input from the client
+    char buffer[BUFFER_SIZE];
+    ssize_t bytesRead;
+
+    // Loop to continuoulsy read input from the client 
+    while ((bytesRead = recv(psd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytesRead] = '\0'; // Null terminat the received data
+
+        // Check for EOF control d ascii code 4
+        if ( strchr(buffer, 4) != NULL) {
+            break; // Exit the loop if control d is detected
+        }
+        // Write the received input to the specified file 
+        if (write(fd, buffer, bytesRead) == -1) {
+            // If write to file fails send an error message to client 
+            perror("Error: writing to file");
+            const char *errorMsg = "Error writing to file.\n#";
+            send(psd, errorMsg, strlen(errorMsg), 0);
+            close(fd); // close the file descriptor
+            return;
+        }
+    }
+    // Close the file after writing is complete 
+    close(fd);
+    // Notify the client the file write is complete
+    const char *doneMsg = "File write is complete.\n# ";
+    send(psd, doneMsg, strlen(doneMsg), 0);
+
 }
