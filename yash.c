@@ -10,60 +10,150 @@
 */
 // Step 1 Include necessary headers and global variables from book
 #include "yashd.h"
-
+#define MAXHOSTNAME 80
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
 
-void cleanup(char *buf);
-void sig_handler(int signo);
+//void sig_handler(int signo);
+void GetUserInput();
 void send_command_to_server(const char *command);
 void* communication_thread(void *args);
+void client_signal_handlers();
+void handle_sigint(int sig);
+void handle_sigtstp(int sig);
+void handle_sigquit(int sig);
+void cleanup(char *buf);
 
-int promptMode = 0;
-
-int clientAlive = 1;
+char buffer[BUFFER_SIZE];
+char rbuf[BUFFER_SIZE];
 
 int sockfd = 0; // declare globally to use in signal handler
-
+int rc, cc;
+int   sd; // Socket File Descriptor 
 /* Initialize mutex lock */
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-void cleanup(char *buf)
+
+int main(int argc, char *argv[]){
+    
+    pthread_t thread;
+    int threadStatus;
+    client_signal_handlers(); // Set up signal handlers
+
+    struct sockaddr_in servaddr; // structure for server address 
+
+    // check for correct number of arguments expect server ip 
+    if ( argc !=2) {
+        fprintf(stderr, "Usage: %s <server_ip>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    // setup server address structure 
+    servaddr.sin_family = AF_INET; // ipv4 protocol 
+    servaddr.sin_port = htons(PORT); // convert port number to network byte
+
+    // create a sockt for communication ipv4, tcp 
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // convert ip address from text to binary format 
+    if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
+        perror("Invalid ip address / address not supported");
+        exit(EXIT_FAILURE);
+    }
+
+    // connect socket to server address
+    if(connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) <0) {
+        perror("Error: Connection to server failed");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+  
+    if ((threadStatus = pthread_create(&thread, NULL, communication_thread, (void *)NULL))) {
+      fprintf(stderr, "error: pthread_create, rc: %d\n", threadStatus);
+      exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to server at %s:%d\n", argv[1], PORT);
+    // printf("# "); // display prompt
+
+    // Get input
+    GetUserInput();
+   
+    //char command[BUFFER_SIZE] = {0}; // buffer for user input 
+    //// Main loop to send commands and receive responses
+    //while (1) {
+    //cleanup(command); // Clear the command buffer
+    //// Read command input from the user 
+    //if (fgets(command, sizeof(command), stdin) == NULL) {
+    //    if (feof(stdin)) {
+    //        printf("Client terminating....\n");
+    //        // Send a disconnect signal to the server
+    //        if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
+    //            perror("Failed to send control-d signal");
+    //        }
+    //        shutdown(sockfd, SHUT_RDWR); // Graceful shutdown
+    //        break;
+    //    } else {
+    //        perror("Error reading command");
+    //        break;
+    //    }
+    //}
+    //fflush(stdout);
+    //send_command_to_server(command); // Send the command to the server
+    //}
+    close(sockfd);
+    pthread_join(thread, NULL);
+    
+    printf("The client has terminated.\n");
+    
+    return 0;
+}
+
+void GetUserInput()
 {
-    int i;
-    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
-}
+    char *input = NULL;
+    size_t len = 0;
+    printf("\nType anything followed by RETURN, or type CTRL-D to exit\n");
 
-// Signal handler to manage ctrl c and ctrl z signals 
-void sig_handler(int signo) {
-    char ctl_msg[BUFFER_SIZE] = {0};    // Buffer for control message
-    if (signo == SIGINT) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL c\n"); // Send ctl c for ctrl-c
-    } else if (signo == SIGTSTP) {
-        snprintf(ctl_msg, sizeof(ctl_msg), "CTL z\n"); // Send ctl z for ctrl-z
+    for(;;) {
+
+    cleanup(buffer);
+	rc=read(0,buffer, sizeof(buffer));
+
+	if (rc == 0) {
+        // Control D (EOF detected)
+        printf("\nSending Ctrl+D to server........\n");
+        pthread_mutex_lock(&lock);
+        if (send(sd, "CTL d\n", 6, 0) <0) {
+            perror("Sending Ctrl D message");
+        }
+        pthread_mutex_unlock(&lock);
+        break;
+    }
+    buffer[rc -1] = '\0'; // Remove newline character 
+    // Use send command to server for sending input
+    send_command_to_server(buffer);
     }
 
-    // Send the control message to the server
-    if (send(sockfd, ctl_msg, strlen(ctl_msg), 0) < 0) {
-        perror("Failed to send control signal");
-    }
-    printf(" Control signal sent to server. \n");
+    printf("EOF... exit\n");
+    close(sd);
+    //kill(getppid(), 9);
+    pthread_exit(NULL);
+    exit (0);
 }
-
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
 
     pthread_mutex_lock(&lock); // wrap CS in lock ...
-    //promptMode = 0;
-    
-    //printf("before send command: %d\n", promptMode); // display prompt
     fflush(stdout);
     char message[BUFFER_SIZE] = {0}; // Buffer for the message to be sent 
 
     cleanup(message); // clear the buffer
-
     // debuggin output: check what is being sent
-    printf("Client sending command: %s", command);
+    printf("Client sending command: %s\n", command);
 
     // split the command by spaces to handle redirection and pipes 
     // Use strtok to split the command
@@ -80,7 +170,6 @@ void send_command_to_server(const char *command) {
         return; // exit the current function without affecting the rest of the client loop 
         // if the send fails we would want the user to re-ejter the command or shut down.
     }
-    
     fflush(stdout);
     free(command_copy);
     pthread_mutex_unlock(&lock); // ... unlock
@@ -131,121 +220,49 @@ void* communication_thread(void *args){
     }
     pthread_exit(NULL);
 }
+void cleanup(char *buf)
+{
+    int i;
+    for(i=0; i<BUFFER_SIZE; i++) buf[i]='\0';
+}
+void client_signal_handlers() {
+    signal(SIGINT, handle_sigint);
+    printf("Signal int handlers initialized.\n");
 
+    signal(SIGTSTP, handle_sigtstp);
+    printf("Signal tsp handlers initialized.\n");
 
-#ifndef TESTING
+    signal(SIGQUIT, handle_sigquit);
+    printf("Signal quit handlers initialized.\n");
 
-int main(int argc, char *argv[]){
-
-    pthread_t thread;
-    int threadStatus;
-
-    struct sockaddr_in servaddr; // structure for server address 
-
-    // check for correct number of arguments expect server ip 
-    if ( argc !=2) {
-        fprintf(stderr, "Usage: %s <server_ip>\n", argv[0]);
-        return EXIT_FAILURE;
+}
+// Signal handler for Ctrl+C (SIGINT)
+void handle_sigint(int sig) {
+    printf("\nSending Ctrl+C (SIGINT) to server...\n");
+    pthread_mutex_lock(&lock);
+    if (send(sockfd, "CTL c\n", 6, 0) < 0) {
+        perror("sending Ctrl+C message");
     }
-
-    // create a sockt for communication ipv4, tcp 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <0) {
-        perror("Socket creation failed");
-        return EXIT_FAILURE;
-    }
-
-    // setup server address structure 
-    servaddr.sin_family = AF_INET; // ipv4 protocol 
-    servaddr.sin_port = htons(PORT); // convert port number to network byte
-
-    // convert ip address from text to binary format 
-    if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
-        perror("Invalid ip address / address not supported");
-        return EXIT_FAILURE;
-    }
-
-    // connect socket to server address
-    if(connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) <0) {
-        perror("Connectio to server failed");
-        return EXIT_FAILURE;
-    }
-
-    if ((threadStatus = pthread_create(&thread, NULL, communication_thread, (void *)NULL))) {
-      fprintf(stderr, "error: pthread_create, rc: %d\n", threadStatus);
-      return EXIT_FAILURE;
-    }
-
-    // set up signal handlers for ctrl c and ctrl z 
-    signal(SIGINT, sig_handler); // catch ctrl c sigint
-    signal(SIGTSTP, sig_handler); // catch ctrl z sigtstp
-
-    printf("Connected to server at %s:%d\n", argv[1], PORT);
-    // printf("# "); // display prompt
-
-   
-    char command[BUFFER_SIZE] = {0}; // buffer for user input 
-    // Main loop to send commands and receive responses
-while (1) {
-    cleanup(command); // Clear the command buffer
-
-    // Read command input from the user 
-    if (fgets(command, sizeof(command), stdin) == NULL) {
-        if (feof(stdin)) {
-            printf("Client terminating....\n");
-            // Send a disconnect signal to the server
-            if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
-                perror("Failed to send control-d signal");
-            }
-            shutdown(sockfd, SHUT_RDWR); // Graceful shutdown
-            break;
-        } else {
-            perror("Error reading command");
-            break;
-        }
-    }
-    fflush(stdout);
-    send_command_to_server(command); // Send the command to the server
+    pthread_mutex_unlock(&lock);
 }
 
-
-   /*// main loop to send commands and receive responses
-    while (1) {
-        
-        /*pthread_mutex_lock(&lock);
-        if(promptMode) {
-            printf("# ");
-            //printf("1promptMode: %d\n", promptMode);
-            fflush(stdout);
-            promptMode = 0;
-        }
-        pthread_mutex_unlock(&lock);
-        cleanup(command); // clear the 
-        
-
-        // read command input from the user 
-        if (fgets(command, sizeof(command), stdin) ==  NULL) {
-            if (feof(stdin)) {
-                printf("Client terminating....\n");
-                if(send(sockfd, "CTL d\n", strlen("CTL d\n"), 0) < 0) {
-                    perror("Failed to send control-d signal");
-                }
-                shutdown(sockfd, SHUT_RDWR);
-                break;
-            } else {
-                perror("error reading command");
-                break;
-            }
-        }
-        fflush(stdout);
-        send_command_to_server(command);
-    }*/
-
+// Signal handler for Ctrl+Z (SIGTSTP)
+void handle_sigtstp(int sig) {
+    printf("\nSending Ctrl+Z (SIGTSTP) to server...\n");
+    pthread_mutex_lock(&lock);
+    if (send(sockfd, "CTL z\n", 6, 0) < 0) {
+        perror("sending Ctrl+Z message");
+    }
+    pthread_mutex_unlock(&lock);
+}
+// Signal handler for Ctrl+D (SIGQUIT)
+void handle_sigquit(int sig) {
+    printf("\nSending Ctrl+D (SIGQUIT) to server...\n");
+    pthread_mutex_lock(&lock);
+    if (send(sockfd, "CTL d\n", 6, 0) < 0) {
+        perror("sending Ctrl+D message");
+    }
+    pthread_mutex_unlock(&lock);
     close(sockfd);
-    pthread_join(thread, NULL);
-    
-    printf("yash client terminated.\n");
-    
-    return 0;
+    exit(0);
 }
-
-#endif

@@ -5,6 +5,8 @@
 #ifndef YASHD_H // If yashd_h is not defined
 #define YASHD_H // define yashd_h
 
+#define PORT 3820   
+
 // including standard libraries for various functionalities for the client
 #include <stdio.h> // standard input output library 
 #include <stdlib.h> // standard library includes functions malloc() free() 
@@ -14,6 +16,7 @@
 #include <unistd.h>         // POSIX api for close () 
 #include <signal.h>         // signal handling sigint sigtstp 
 #include <errno.h>          // error handling macros
+#include <signal.h>
 
 // server headers
 #include <sys/types.h>
@@ -31,6 +34,11 @@
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
+
+#include <stdio.h>
+/* socket(), bind(), recv, send */
+#include <string.h> /* memset() */
+
 
 // function prototype for handle_client
 // This function is responsible for handling communication with a connected client in a separate thread 
