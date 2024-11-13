@@ -4,35 +4,24 @@
 // Run: lsof -i :3820 sudo lsof -i :3820
 // Run: kill -9 <PID>
 
-// basic functionality for connecting to the server
-
 #include "yashd.h"
 
-#define PROMPT "\n# "
-#define MAX_INPUT 200
-#define MAX_ARGS 100
-#define MAX_JOBS 20 
-#define BUFFER_SIZE 1024  
-#define PATHMAX 255
-#define MAXHOSTNAME 80
-int psd; 
-/* Initialize path variables */
+// int psd;
 
+/* Initialize path variables */
 static char* server_path = "./tmp/yashd";
 char* log_path = "./tmp/yashd.log";
 static char* pid_path = "./tmp/yashd.pid";
 static char socket_path[PATHMAX + 1];
 
-
 /* Initialize mutex lock */
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-
+// Functions
 void reusePort(int sock);
 void *serveClient(void *args);
 void *logRequest(void *args);
 
-//void execute_command(char **cmd_args, char *original_cmd, int psd);
 void apply_redirections(char **cmd_args, int psd);
 void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd);
 void validatePipes(const char *command, int psd);
@@ -40,16 +29,16 @@ int validateCommand(const char *command, int psd);
 
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
 //void update_job_markers(int current_job_index) ;
-void print_jobs();
+void print_jobs(int psd);
 //void fg_job(int job_id);
-//void bg_job(int job_id);
+void bg_job(int job_id, int psd);
 //void bg_command(char **cmd_args);
 
 void remove_newLine(char *line);
 void run_in_background(char **cmd_args);
 // Signals 
-void sigint_handler(int sig);
-void sigtstp_handler(int sig);
+void sigint_handler(int sig, int psd);
+void sigtstp_handler(int sig, int psd);
 void sigchld_handler(int sig);
 void sig_pipe(int n) ;
 void setup_signal_handlers();
@@ -114,14 +103,14 @@ void daemon_init(const char * const path, uint mask)
 
 
   ///* Establish handlers for signals */
-  //if ( signal(SIGCHLD, sigchld_handler) < 0 ) {
-  //  perror("Signal SIGCHLD");
-  //  exit(1);
-  //}
-  //if ( signal(SIGPIPE, sig_pipe) < 0 ) {
-  //  perror("Signal SIGPIPE");
-  //  exit(1);
-  //}
+  if ( signal(SIGCHLD, sigchld_handler) < 0 ) {
+    perror("Signal SIGCHLD");
+    exit(1);
+  }
+  if ( signal(SIGPIPE, sig_pipe) < 0 ) {
+    perror("Signal SIGPIPE");
+    exit(1);
+  }
 
   /* Change directory to specified directory */
   chdir(path); 
@@ -256,7 +245,6 @@ int main(int argc, char **argv ) {
     pthread_mutex_destroy(&lock);// Destroy the mutex at the end
     return 0;
 }
-
 void *serveClient(void *args) {
     ClientArgs *clientArgs = (ClientArgs *)args;
     int psd = clientArgs->psd;
@@ -445,6 +433,18 @@ void *serveClient(void *args) {
         // Handle control commands
         else if (strncmp(buffer, "CTL ", 4) == 0) {
             char controlChar = buffer[4];
+            // Handle Control +D
+            if (controlChar == 'd') {
+                printf("Recevied Ctrl+D from client. Closing connection.\n");
+                // Send Message to the client
+                const char *exitMsg = "Server rec. Ctrl+D. Clossing Connection.\n";
+                send(psd, exitMsg, strlen(exitMsg), 0);
+
+                // Close the client socket and exit the thread 
+                close(psd);
+                free(clientArgs);
+                pthread_exit(NULL);
+            }
             handle_control(psd, controlChar, fg_pid);
         }    
     }
@@ -782,7 +782,7 @@ void validatePipes(const char *command, int psd) {
     
     free(command_copy);
 }
-void print_jobs() {
+void print_jobs(int psd) {
     char buffer[BUFFER_SIZE];
     for (int i = 0; i < job_count; i++) {
         snprintf(buffer, BUFFER_SIZE, "[%d]%c %s %s%s\n" ,
@@ -832,7 +832,7 @@ void add_job(pid_t pid, const char *command, int is_running, int is_background) 
 
     
 }
-void bg_job(int job_id) {
+void bg_job(int job_id, int psd) {
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].job_id == job_id && jobs[i].is_stopped) {
             jobs[i].is_running = 1;
@@ -900,7 +900,6 @@ void bg_job(int job_id) {
 //    
 //
 //
-
 //
 //void bg_command(char **cmd_args) {
 //    pid_t pid = fork();
@@ -1029,15 +1028,15 @@ void sig_pipe(int n)
 /**
  * @brief Handler for SIGCHLD signal 
 // */
-//void sig_chld(int n)
-//{
-//    int status;
-//    fprintf(stderr, "Child terminated\n");
-//    while (waitpid(-1, NULL, WNOHANG) > 0);
-//    //wait(&status); /* So no zombies */
-//}
-// signal handler for sigtstp ctrl z
-void sigint_handler(int sig)
+void sig_chld(int n)
+{
+    int status;
+    fprintf(stderr, "Child terminated\n");
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+    //wait(&status); /* So no zombies */
+}
+ //signal handler for sigtstp ctrl z
+void sigint_handler(int sig, int psd)
 {
     printf("SIGINT (Ctrl+C) handler called in daemon process\n");
     fflush(stdout);
@@ -1046,13 +1045,16 @@ void sigint_handler(int sig)
     {
         // if there is a foreground process , send sigint to it
         kill(fg_pid, SIGINT);
+        dprintf(psd, "\nSent SigINT to foreground process\n# ");
+    } else {
+        dprintf(psd, "\nNo foreground process to send SIGINT.\n# ");
     }
 
-    write(STDOUT_FILENO, "\n# ", 3);
+    write(STDOUT_FILENO, PROMPT, 3);
     fflush(stdout); // ensure the prompt is displayed immediately after the message
 }
 // signal handler for sigtstp ctrl z
-void sigtstp_handler(int sig)
+void sigtstp_handler(int sig, int psd)
 {
     printf("SIGTSTP (Ctrl+Z) handler called in daemon process\n");
     fflush(stdout);
@@ -1065,8 +1067,7 @@ void sigtstp_handler(int sig)
         // find the command associat with the foreground process and add it
         for (int i = 0; i < job_count; i++)
         {
-            if (jobs[i].pid == fg_pid)
-            {
+            if (jobs[i].pid == fg_pid) {
                 jobs[i].is_running = 0;
                 jobs[i].is_stopped = 1;
                 jobs[i].job_marker = '+'; // set marker for the most recent job
@@ -1076,16 +1077,18 @@ void sigtstp_handler(int sig)
         }
 
         fg_pid = -1; // clear the foreground process
-        dprintf(psd, "dprint\n# ");
+        dprintf(psd, "\nSent SIGTSTP to foreground process. dprint\n");
 
         // Send a prompt to the client to indicate readiness for new input
-        if (send(psd,  "\n# ", 3, 0) < 0) {
+        if (send(psd, PROMPT, 3, 0) < 0) {
             perror("Error sending prompt after Ctrl Z");
         }
 
         fflush(stdout); // ensure the prompt is displayed immediately after the message
         //const char *msg = "Type fg to resume.\n";
         //send(psd, msg, strlen(msg), 0);
+    } else {
+        dprintf(psd, "\nNo foreground process to send SIGTSTP.\n#");
     }
 }
 // signal handler for sigtstp ctrl z
@@ -1127,7 +1130,7 @@ void handle_control(int psd, char control, pid_t pid) {
             printf("Sent SIGINT to child process %d\n# ", pid);
             send(psd, msg, strlen(msg), 0);
         } else {
-            const char *msg = "No foreground process to send sigint.\n";
+            const char *msg = "No foreground process to send sigint.\n# ";
             send(psd, msg, strlen(msg), 0);
             printf("No process to send SIGINT\n");
         }
@@ -1146,9 +1149,11 @@ void handle_control(int psd, char control, pid_t pid) {
         // if (pipefd_stdin[1] != -1) {
         //close(pipefd_stdin[1]);
         // pipefd_stdin[1] = -1;
-        const char *msg = "Closed write end of the stdin pipe exiting thread.\n# ";
+        printf("received a control d ");// debugging 
+        const char *msg = "Closed write end of the stdin pipe exiting thread.\n";
         send(psd, msg, strlen(msg), 0);
         printf("Closed write end of stdin pipe\n");
+        close(psd);
         pthread_exit(NULL);
         //}
         // commandRunning = 0;
@@ -1157,7 +1162,6 @@ void handle_control(int psd, char control, pid_t pid) {
         send(psd, errorMsg, strlen(errorMsg), 0);
     }
 }
-
 void handle_cat_command(const char *command, int psd) {
     // Extract file name after cat >
     char *filename = strtok(command + 5, " ");

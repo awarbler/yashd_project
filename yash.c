@@ -14,7 +14,6 @@
 #define PORT 3820           // port number to connect to the server
 #define BUFFER_SIZE 1024    // buffer size for communication
 
-//void sig_handler(int signo);
 void GetUserInput();
 void send_command_to_server(const char *command);
 void* communication_thread(void *args);
@@ -121,28 +120,32 @@ void GetUserInput()
     for(;;) {
 
     cleanup(buffer);
-	rc=read(0,buffer, sizeof(buffer));
+	rc = read(0,buffer, sizeof(buffer));
 
 	if (rc == 0) {
         // Control D (EOF detected)
         printf("\nSending Ctrl+D to server........\n");
         pthread_mutex_lock(&lock);
-        if (send(sd, "CTL d\n", 6, 0) <0) {
-            perror("Sending Ctrl D message");
+        if (send(sockfd, "CTL d\n", 6, 0) <0) {
+            perror("Failed Send Ctrl D message");
         }
         pthread_mutex_unlock(&lock);
         break;
+
+        // Properly close the socket and exit client
+        close(sockfd); 
+        printf("Client Exiting .....\n");
+        pthread_exit(NULL);
+        exit (0);
     }
     buffer[rc -1] = '\0'; // Remove newline character 
     // Use send command to server for sending input
     send_command_to_server(buffer);
     }
-
-    printf("EOF... exit\n");
-    close(sd);
+    //printf("EOF... exit\n");
     //kill(getppid(), 9);
-    pthread_exit(NULL);
-    exit (0);
+    
+    
 }
 // A Test function to send a command to the server 
 void send_command_to_server(const char *command) {
@@ -245,7 +248,7 @@ void client_signal_handlers() {
 }
 // Signal handler for Ctrl+C (SIGINT)
 void handle_sigint(int sig) {
-    printf("\nSending Ctrl+C (SIGINT) to server...\n");
+    printf("\nSending Ctrl+C (SIGINT) to server...\n# ");
     pthread_mutex_lock(&lock);
     if (send(sockfd, "CTL c\n", 6, 0) < 0) {
         perror("sending Ctrl+C message");

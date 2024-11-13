@@ -101,9 +101,6 @@ void fg_job(int job_id) {
     dprintf(psd, "job not found\n");
     printf("Job not found\n");
 }
-    
-
-
 void bg_job(int job_id) {
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].job_id == job_id && jobs[i].is_stopped) {
@@ -125,7 +122,6 @@ void bg_job(int job_id) {
     dprintf(psd, "Job not found\n");
     //printf("Job not found or already running\n");
 }
-
 void bg_command(char **cmd_args) {
     pid_t pid = fork();
     if (pid == 0) {
@@ -139,7 +135,6 @@ void bg_command(char **cmd_args) {
         update_job_markers(job_count - 1);
     }
 }
-
 void update_job_markers(int current_job_index) {
     for (int i = 0; i < job_count; i++) {
         //jobs[i].job_marker = ' ';
@@ -151,7 +146,6 @@ void update_job_markers(int current_job_index) {
     }
   
 }
-
 void print_jobs() {
     for (int i = 0; i < job_count; i++) {
         char job_marker = (i == job_count -1 ) ? '+' : '-';
@@ -162,7 +156,6 @@ void print_jobs() {
         //printf("[%d] %c - stopped %s\n", jobs[i].job_id,job_marker, jobs[i].command);
     }
 }
-
 void fg_job(int job_id) {
     // Used from from Dr.Y book Page-45-49 
     int status;
@@ -246,9 +239,6 @@ void fg_job(int job_id) {
             } while (!WIFEXITED(status)&& !WIFSIGNALED(status));*/
 
 }
-    
-
-
 void bg_job(int job_id) {
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].job_id == job_id && !jobs[i].is_running) {
@@ -260,7 +250,6 @@ void bg_job(int job_id) {
     }
     printf("Job not found or already running\n");
 }
-
 //void add_job(pid_t pid, char *command, int is_running, int is_background)
 void add_job(pid_t pid, const char *command, int is_running, int is_background) {
 
@@ -279,7 +268,6 @@ void add_job(pid_t pid, const char *command, int is_running, int is_background) 
         printf("Job list is full \n");
     }
 }
-
 void update_job_markers(int current_job_index) {
     for (int i = 0; i < job_count; i++) {
         jobs[i].job_marker = ' ';
@@ -342,7 +330,6 @@ void fg_job(int job_id) {
     }
     printf("Job not found\n");
 }
-
 void bg_job(int job_id) {
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].job_id == job_id && !jobs[i].is_running) {
@@ -380,7 +367,6 @@ void update_job_markers(int current_job_index) {
         }
     }
 }
-
   /* from the teachers code 
   // Redirecting stderr to u_log_path 
   log = fopen(u_log_path, "aw"); // attach stderr to u_log_path 
@@ -389,19 +375,16 @@ void update_job_markers(int current_job_index) {
   close (fd);
   / /From this point on printing to stderr will go to /tmp/u-echod.log */
   //From this point on printf and scanf have no effect */
-
 // Create pipes for communication between parent and child
           if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stdin) == -1) {
             perror("pipe");
             exit(EXIT_FAILURE);
           }
-
           // Fork a child process to execute the command
           if ((pid = fork()) == -1) {
               perror("fork");
               exit(EXIT_FAILURE);
           }
-
           if (pid == 0) {
             // Child process
           
@@ -458,14 +441,12 @@ void update_job_markers(int current_job_index) {
             }
             //close(pipefd_stdout[0]);
           }
-
           // // Send # to indicate the end of the command output
           if (send(psd, "\n# ", sizeof("\n# "), 0) <0 ){
              perror("sending stream message");
           } else{
             printf("sent over to client  #3 ");
           }
-          
         } 
         else if (strncmp(buffer, "CTL ", 4) == 0) { 
           // Handle: CTL<blank><char[c|z|d]>\n
@@ -765,9 +746,7 @@ void update_job_markers(int current_job_index) {
 //    pthread_exit(NULL);
 //}
 //
-
             //}
-        
             //else if (strchr(command, '&') != NULL) { //  add to the bg with &
 //                command[strlen(command) - 1] = '\0';  // Remove '&'
 //                char *cmd_args[MAX_ARGS];
@@ -799,7 +778,6 @@ void update_job_markers(int current_job_index) {
                 //send(psd, PROMPT, strlen(PROMPT), 0);
                 //continue;
             //} //  end background command 
-
 //void validatePipes(const char *command, int psd) {// Check for pipes in the command
 //    char *pipe_position = strchr(command, '|');
 //    if (pipe_position) {
@@ -846,34 +824,28 @@ void update_job_markers(int current_job_index) {
     //const char *errorMsg = "No pipes found in the command.\n#";
     //send(psd, errorMsg, strlen(errorMsg), 0);
 //}
-
 /*void validatePipes(const char *command, int psd) {
     char *command_copy = strdup(command);
     if (!command_copy) {
         send(psd, "Memory allocation error\n# ", 25, 0);
         return;
     }
-
     // Find the pipe character
     char *pipe_pos = strchr(command_copy, '|');
     if (!pipe_pos) {
         free(command_copy);
         return;
     }
-
     // Split the command into left and right parts
     *pipe_pos = '\0';
     char *left_cmd = command_copy;
     char *right_cmd = pipe_pos + 1;
-
     // Remove leading/trailing spaces
     while (*left_cmd == ' ') left_cmd++;
     while (*right_cmd == ' ') right_cmd++;
-
     // Create argument arrays
     char *left_args[MAX_ARGS];
     char *right_args[MAX_ARGS];
-    
     // Parse left command
     int i = 0;
     left_args[i] = strtok(left_cmd, " \t");
@@ -882,7 +854,6 @@ void update_job_markers(int current_job_index) {
         left_args[i] = strtok(NULL, " \t");
     }
     left_args[i] = NULL;
-
     // Parse right command
     i = 0;
     right_args[i] = strtok(right_cmd, " \t");
@@ -891,13 +862,11 @@ void update_job_markers(int current_job_index) {
         right_args[i] = strtok(NULL, " \t");
     }
     right_args[i] = NULL;
-
     // Execute the pipe
     handle_pipe(left_args, right_args, psd);
-    
+
     free(command_copy);
 }*/
-
 //void validateCommand(const char *command, int psd)
 //{
 //    // check if the user input is empty pressing enter without types anything
@@ -967,7 +936,6 @@ void update_job_markers(int current_job_index) {
 //    send(psd, "\n# ", strlen("\n# "), 0); // 
 //
 //}
-
 // This is where the server will be set up yashd.c
 // Troubleshooting the server
 // 1. Error binding name to stream socket: Address already in use 
@@ -1671,9 +1639,6 @@ void *serveClient(void *args) {
     }
     return NULL;
 }
-
-
-
 void reusePort(int s)
 {
     int one = 1;
@@ -1739,7 +1704,6 @@ void reusePort(int s)
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
 }*/
-
 void handle_pipe(char **commands, int psd) {
     int pipe_fd[2];
     pid_t pid1, pid2;
@@ -1802,11 +1766,6 @@ void handle_pipe(char **commands, int psd) {
 
     send_psd(psd, "\n# ", 3, 0);
 }
-
-
-
-
-
 // signal handler for sigtstp ctrl z
 void sigint_handler(int sig)
 {
@@ -1825,7 +1784,6 @@ void sigint_handler(int sig)
     // tcflush(STDIN_FILENO, TCIFLUSH);
     fflush(stdout); // ensure the prompt is displayed immediately after the message
 }
-
 // signal handler for sigtstp ctrl z
 void sigtstp_handler(int sig)
 {
@@ -1855,7 +1813,6 @@ void sigtstp_handler(int sig)
         fflush(stdout); // ensure the prompt is displayed immediately after the message
     }
 }
-
 // signal handler for sigtstp ctrl z
 void sigchld_handler(int sig)
 {
@@ -1884,7 +1841,6 @@ void sigchld_handler(int sig)
         }
     }
 }
-
 void apply_redirections(char **cmd_args, int psd) {
     int i = 0;
     int in_fd = -1, out_fd = -1, err_fd = -1;
@@ -2045,10 +2001,6 @@ void apply_redirections(char **cmd_args, int psd) {
     }
     i++;*/
 }
-
-
-
-
 int validateCommand(const char *command, int psd)
 {
     // check if input starts with a special character and skip 
@@ -2206,7 +2158,6 @@ int validateCommand(const char *command, int psd)
     return 1;  // Added return 1 for success
 }
 */
-
 int recData(int psd, char *buffer)
 {
     int bytesRead = recv(psd, buffer, BUFFER_SIZE, 0);
@@ -2228,7 +2179,6 @@ int recData(int psd, char *buffer)
     printf("Received buffer: %s", buffer);
     return bytesRead;
 }
-
 void validatePipes(const char *command, int psd) {
     char *command_copy = strdup(command);
     if (!command_copy) {
@@ -2269,11 +2219,9 @@ void validatePipes(const char *command, int psd) {
     handle_pipe((char *[]){left_cmd, right_cmd, NULL}, psd);
     free(command_copy);
 }
-
 void send_psd(int fd, const char *buf, size_t len, int flags) {
     send(fd, buf, len, flags);
 }
-
 char **tokenize_command(char *command) {
     char **tokens = malloc(MAX_ARGS * sizeof(char *));
     if (tokens == NULL) {
@@ -2292,7 +2240,6 @@ char **tokenize_command(char *command) {
 
     return tokens;
 }
-
 int find_pipe_index(char **args) {
     int i;
     for (i = 0; args[i] != NULL; i++) {
@@ -2413,9 +2360,6 @@ void receive_output_from_server(int sockfd) {
         const char *msg = "Process suspended type fg to resume \n#  ";
         send(psd, msg, strlen(msg), 0);
     }
-
-
-
 
     (strchr(command, '&') != NULL) { // check for background command ends with &
                 // Parse and manage background commands ending with &
