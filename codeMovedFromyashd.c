@@ -55,7 +55,6 @@ void print_jobs() {
         send(psd, buffer, strlen(buffer), 0);
     }
 }
-
 void fg_job(int job_id) {
     // Used from from Dr.Y book Page-45-49 
     int status;
@@ -2965,6 +2964,50 @@ void fg_job(int job_id, int psd) {
     dprintf(psd, "job not found\n");
     printf("Job not found\n");
 }
+void fg_job(int job_id, int psd) { // Used from from Dr.Y book Page-45-49 
+    int status;
+
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id) {
+            fg_pid = jobs[i].pid;// Setting a foreground process
+            jobs[i].is_running = 1;
+            //fg_pid = jobs[i].pid;// Setting a foreground process
+            //jobs[i].is_running = 1; // mark as running  
+            // print to both client and server 
+            dprintf(psd, "%s\n", jobs[i].command); // prints teh command when bringing to the foreground
+            printf("%s\n", jobs[i].command); // 
+
+            fflush(stdout); //ensure teh command is printed immediately 
+            // brings the job to the foreground
+            kill(-jobs[i].pid, SIGCONT);// wait for the process to cont. the stopped proces
+            waitpid(jobs[i].pid, &status, WUNTRACED); // wait for the process to finish or be stopped again should it be zero or wuntrance
+
+            fg_pid = -1; // Clear foreground process , no longer a fg process 
+
+            // update job status if it was stopped again 
+            if (WIFSTOPPED(status)) {
+                jobs[i].is_running = 0; // mark a stopped 
+            } else {
+                // if the job finished remove it from the job list
+                dprintf(psd, "[%d] Done %s\n", jobs[i].job_id, jobs[i].command);  
+                printf("[%d] Done %s\n", jobs[i].job_id, jobs[i].command); 
+
+                for (int j = i; j < job_count - 1; j++) {
+                    jobs[j] = jobs[j + 1 ];
+                }
+                job_count--;
+            }
+
+            // Once completed mark the job as done or remove it 
+            //printf("[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
+            //break;
+
+            return;
+        }
+    }  
+    dprintf(psd, "job not found\n");
+    printf("Job not found\n");
+}
 void bg_command(char **cmd_args) {
     pid_t pid = fork();
     if (pid == 0) {
@@ -2978,6 +3021,19 @@ void bg_command(char **cmd_args) {
         update_job_markers(job_count - 1);
     }
 }
+//void bg_command(char **cmd_args) {
+//    pid_t pid = fork();
+//    if (pid == 0) {
+//        // Child process
+//        execvp(cmd_args[0], cmd_args);
+//        perror("execvp failed");  // If execvp fails
+//        exit(EXIT_FAILURE);
+//    } else if (pid > 0) {
+//        // Parent process
+//        add_job(pid, cmd_args[0], 1, 1);  // Mark as running and in background
+//        update_job_markers(job_count - 1);
+//    }
+//}
 void update_job_markers(int current_job_index) {
     for (int i = 0; i < job_count; i++) {
         //jobs[i].job_marker = ' ';
