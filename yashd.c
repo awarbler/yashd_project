@@ -497,7 +497,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd) {
 
     if (pipe(pipe_fd) == -1) {
         perror("pipe");
-        send(psd, "Error creating pipe\n# ", 21, 0);
+        send(psd, "Error creating pipe\n", 21, 0);
         return;
     }
 
@@ -590,7 +590,7 @@ void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd) {
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
 
-    send(psd, "\n# ", 3, 0); // Send prompt to client
+    //send(psd, PROMPT, 3, 0); // Send prompt to client
 }
 void apply_redirections(char **cmd_args, int psd) {
     int i = 0;
@@ -1070,15 +1070,13 @@ void sig_chld(int n)
 void sigint_handler(int sig)
 {
     printf("SIGINT (Ctrl+C) handler called in daemon process\n");
-    fflush(stdout);
     printf("sigint handler called\n");
-    if (fg_pid > 0)
-    {
+    if (fg_pid > 0) {
         // if there is a foreground process , send sigint to it
         kill(fg_pid, SIGINT);
-        printf("\nSent SigINT to foreground process\n# ");
+        printf("\nSent SigINT to foreground process\n");
     } else {
-        printf("\nNo foreground process to send SIGINT.\n# ");
+        printf("\nNo foreground process to send SIGINT.\n");
     }
 
     write(STDOUT_FILENO, PROMPT, 3);
@@ -1088,8 +1086,8 @@ void sigint_handler(int sig)
 void sigtstp_handler(int sig)
 {
     printf("SIGTSTP (Ctrl+Z) handler called in daemon process\n");
-    fflush(stdout);
-    printf("sigtstp handler called\n");
+    //fflush(stdout);
+    printf("SIGTSTP (Ctrl+Z) handler called\n");
     if (fg_pid > 0)
     {
         // if there is a foreground process , send sigint to it
@@ -1109,9 +1107,6 @@ void sigtstp_handler(int sig)
 
         fg_pid = -1; // clear the foreground process
         printf("\nSent SIGTSTP to foreground process. dprint\n");
-
-
-
         fflush(stdout); // ensure the prompt is displayed immediately after the message
         //const char *msg = "Type fg to resume.\n";
         //send(psd, msg, strlen(msg), 0);

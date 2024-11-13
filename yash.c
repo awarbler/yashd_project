@@ -130,8 +130,6 @@ void GetUserInput()
             perror("Failed Send Ctrl D message");
         }
         pthread_mutex_unlock(&lock);
-        break;
-
         // Properly close the socket and exit client
         close(sockfd); 
         printf("Client Exiting .....\n");
