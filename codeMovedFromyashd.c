@@ -1,3 +1,684 @@
+// Jobs
+void print_jobs(int psd);
+void add_job(pid_t pid, const char *command, int is_running, int is_background);
+void update_job_markers() ;
+void fg_job(int job_id, int psd);
+void bg_job(int job_id, int psd);
+void remove_newLine(char *line);
+void sigint_handler(int sig);
+void sigtstp_handler(int sig);
+void sigchld_handler(int sig);
+
+void *serveClient(void *args) {
+    ClientArgs *clientArgs = (ClientArgs *)args;
+    int psd = clientArgs->psd;
+    struct sockaddr_in from = clientArgs->from;
+    char buffer[BUFFER_SIZE];
+    int bytesRead;
+    //pthread_t p;
+    pid_t pid;
+    //int pipefd_stdin[2] = {-1, -1};
+    //int pipe_fd[2];
+
+    // Send initial prompt
+    if (send(psd, PROMPT, sizeof(PROMPT), 0) < 0) {
+        perror("Sending Prompt");
+        close(psd);
+        free(clientArgs);
+        pthread_exit(NULL);
+    }
+
+    for (;;) {
+        printf("\n...server is waiting...\n");
+        cleanup(buffer);
+
+        bytesRead = recv(psd, buffer, sizeof(buffer), 0);
+        if (bytesRead <= 0) {
+            if (bytesRead == 0) {
+                printf("Connection closed by client\n");
+            } else {
+                perror("Error receiving stream message\n");
+            }
+            close(psd);
+            free(clientArgs);
+            pthread_exit(NULL);
+        }
+
+        buffer[bytesRead] = '\0';
+        printf("Received Buffer: %s", buffer);
+
+        
+        if (strncmp(buffer, "CMD ", 4) == 0) {
+            char *command = buffer + 4;
+            command[strcspn(command, "\n")] = '\0';
+            printf("Command Received: %s\n", command);
+
+            // Check if command is cat > filename
+            if (strncmp(command, "cat > ", 5) == 0) {
+                // call the handle cat function 
+                handle_cat_command(command, psd);
+                continue; // Skip and wait for next command
+            }
+
+            // Handle job commands fg bg and & 
+
+            
+            // Check for background command (ends with '&')
+            //if (strchr(command, '&') != NULL) {
+            //    command[strlen(command) - 1] = '\0';  // Remove '&'
+                //char *cmd_args[MAX_ARGS];
+                //int i = 0;
+                //  add job function starts here
+            //    add_job(pid, command, 1, 1); // add job to jobs array
+                //cmd_args[i] = strtok(command, " ");
+                //while (cmd_args[i] != NULL && i < MAX_ARGS - 1) {
+                //    i++;
+                //    cmd_args[i] = strtok(NULL, " ");
+                //}
+                //cmd_args[i] = NULL;
+                //bg_command(cmd_args);  // Start background job
+                //send(psd, PROMPT, strlen(PROMPT), 0);
+                //continue;
+            //} //  end background command 
+
+            // Handle/ Check for jobs control command s
+            if (strcmp(command, "jobs") == 0) {
+                print_jobs(psd); // Pass the clients socket descriptor 
+                send(psd, PROMPT, strlen(PROMPT), 0);
+                continue;
+            }
+            // Check for fg 
+            if (strncmp(command, "fg", 2) == 0) {
+                int job_id = (strlen(buffer) > 2) ? atoi(buffer + 3) : -1;
+                fg_job(job_id, psd);
+                // print_jobs(psd); // Pass the clients socket descriptor 
+                send(psd, PROMPT, strlen(PROMPT), 0);
+                continue;
+            } 
+            // Check for bg
+            if (strncmp(command, "bg", 2) == 0) {
+                int job_id = (strlen(buffer) > 2) ? atoi(buffer + 3) : -1;
+                bg_job(job_id, psd);
+                
+                // print_jobs(psd); // Pass the clients socket descriptor 
+                send(psd, PROMPT, strlen(PROMPT), 0);
+                continue;
+            } 
+
+            int is_background = check_background(command);
+
+            // Check for pipe
+            if (strchr(command, '|') != NULL) {
+                // Log the command with pipe 
+                log_command(command, from, is_background);
+                validatePipes(command, psd);
+                send(psd, PROMPT, strlen(PROMPT), 0); // Send prompt back to the client 
+                continue;
+            }
+            
+            // First validate the command
+            if (!validateCommand(command, psd)) {
+                send(psd, PROMPT, strlen(PROMPT), 0);
+                continue;  // Skip invalid commands
+            }
+            // Log the command
+            log_command(command, from, is_background);
+
+            // Parse command and check for redirections
+            char *cmd_args[MAX_ARGS];
+            int i = 0;
+            char *input_file = NULL;
+            char *output_file = NULL;
+            
+            // Tokenize the command
+            cmd_args[i] = strtok(command, " ");
+            while (cmd_args[i] != NULL && i < MAX_ARGS - 1) {
+                if (strcmp(cmd_args[i], ">") == 0) {
+                    cmd_args[i] = NULL;
+                    output_file = strtok(NULL, " ");
+                    break;
+                } else if (strcmp(cmd_args[i], "<") == 0) {
+                    cmd_args[i] = NULL;
+                    input_file = strtok(NULL, " ");
+                    break;
+                }
+                i++;
+                cmd_args[i] = strtok(NULL, " ");
+            }
+            cmd_args[i] = NULL;
+
+            // Create pipe for output
+            int pipe_fd[2];
+            if (pipe(pipe_fd) == -1) {
+                perror("pipe");
+                continue;
+            }
+            // Fork the process
+            pid = fork();
+            if (pid == -1) {
+                perror("fork");
+                close(pipe_fd[0]);
+                close(pipe_fd[1]);
+                continue;
+            }
+            if (pid == 0) { // Child process
+                close(pipe_fd[0]);
+                if (is_background) {setsid();} // Create a new session for background process
+
+                // Handle input redirection
+                if (input_file != NULL) {
+                    int fd = open(input_file, O_RDONLY);
+                    if (fd == -1) {
+                        perror("open input file");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                }
+
+                // Handle output redirection
+                if (output_file != NULL) {
+                    int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fd == -1) {
+                        perror("open output file");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                } else {
+                    dup2(pipe_fd[1], STDOUT_FILENO);
+                }
+                
+                dup2(pipe_fd[1], STDERR_FILENO);
+                close(pipe_fd[1]);
+
+                execvp(cmd_args[0], cmd_args);
+                perror("execvp failed");
+                exit(EXIT_FAILURE);
+            }
+
+            // Parent process
+            close(pipe_fd[1]);
+            
+            // Read and send output
+            char read_buffer[BUFFER_SIZE];
+            ssize_t bytes_read;
+            while ((bytes_read = read(pipe_fd[0], read_buffer, sizeof(read_buffer) - 1)) > 0) {
+                read_buffer[bytes_read] = '\0';
+                send(psd, read_buffer, bytes_read, 0);
+            }
+            // Add the job to the job table 
+            add_job(pid, strdup(command), 1, is_background);
+
+            // Foreground job wait for it 
+            if (!is_background) {
+                fg_pid = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED);
+                fg_pid = -1 ;
+
+                // Update job status 
+                if (WIFSTOPPED(status)) {
+                    for (int i = 0; i < job_count; i++) {
+                        if (jobs[i].pid == pid) {
+                            jobs[i].is_running = 0;
+                            jobs[i].is_stopped = 1; 
+                            break;
+                        }
+                    }
+                } 
+            }
+            close(pipe_fd[0]);
+            waitpid(pid, NULL, 0);
+            pid = -1;
+
+            // Send prompt
+            send(psd, PROMPT, strlen(PROMPT), 0); 
+        }
+        // Handle control commands
+        else if (strncmp(buffer, "CTL ", 4) == 0) {
+            char controlChar = buffer[4];
+            // Handle Control +D
+            if (controlChar == 'd') {
+                printf("Recevied Ctrl+D from client. Closing connection.\n");
+                // Send Message to the client
+                const char *exitMsg = "Server rec. Ctrl+D. Clossing Connection.\n";
+                send(psd, exitMsg, strlen(exitMsg), 0);
+
+                // Close the client socket and exit the thread 
+                close(psd);
+                free(clientArgs);
+                pthread_exit(NULL);
+            }
+            handle_control(psd, controlChar, fg_pid);
+        }    
+    }
+    return NULL;
+}
+void handle_pipe(char **cmd_args_left, char **cmd_args_right, int psd) {
+    int pipe_fd[2];
+    pid_t pid1, pid2;
+
+    if (pipe(pipe_fd) == -1) {
+        perror("pipe");
+        send(psd, "Error creating pipe\n", 21, 0);
+        return;
+    }
+
+    // First child for left command
+    if ((pid1 = fork()) == -1) {
+        perror("fork");
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return;
+    }
+
+    if (pid1 == 0) { // Child process
+        close(pipe_fd[0]);  // Close read end of pipe
+
+        // Check and apply redirections for left command
+        int out_fd = -1, in_fd = -1;
+        for (int i = 0; cmd_args_left[i] != NULL; i++) {
+            if (strcmp(cmd_args_left[i], ">") == 0) {
+                out_fd = open(cmd_args_left[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (out_fd == -1) {
+                    perror("open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(out_fd, STDOUT_FILENO);
+                cmd_args_left[i] = NULL; // Remove redirection operator
+            } else if (strcmp(cmd_args_left[i], "<") == 0) {
+                in_fd = open(cmd_args_left[i + 1], O_RDONLY);
+                if (in_fd == -1) {
+                    perror("open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(in_fd, STDIN_FILENO);
+                cmd_args_left[i] = NULL; // Remove redirection operator
+            }
+        }
+
+        // Redirect stdout to pipe if no file redirection
+        if (out_fd == -1) dup2(pipe_fd[1], STDOUT_FILENO);
+        
+        close(pipe_fd[1]);
+
+        execvp(cmd_args_left[0], cmd_args_left);
+        perror("execvp failed for left command");
+        exit(EXIT_FAILURE);
+    }
+
+    // Second child for right command
+    if ((pid2 = fork()) == -1) {
+        perror("fork");
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        kill(pid1, SIGTERM);
+        return;
+    }
+
+    if (pid2 == 0) { // Child process
+        close(pipe_fd[1]);  // Close write end of pipe
+
+        // Check and apply redirections for right command
+        int in_fd = -1;
+        for (int i = 0; cmd_args_right[i] != NULL; i++) {
+            if (strcmp(cmd_args_right[i], "<") == 0) {
+                in_fd = open(cmd_args_right[i + 1], O_RDONLY);
+                if (in_fd == -1) {
+                    perror("open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(in_fd, STDIN_FILENO);
+                cmd_args_right[i] = NULL; // Remove redirection operator
+            }
+        }
+
+        // Set up output to go back to socket
+        dup2(psd, STDOUT_FILENO);
+        dup2(psd, STDERR_FILENO);
+
+        // Redirect stdin to pipe if no file redirection
+        if (in_fd == -1) dup2(pipe_fd[0], STDIN_FILENO);
+        
+        close(pipe_fd[0]);
+
+        execvp(cmd_args_right[0], cmd_args_right);
+        perror("execvp failed for right command");
+        exit(EXIT_FAILURE);
+    }
+
+    // Parent process closes both ends of the pipe and waits for children
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+
+    //send(psd, PROMPT, 3, 0); // Send prompt to client
+}
+
+int validateCommand(const char *command, int psd) {
+    if (strcmp(command, "jobs") == 0 
+        || strncmp(command, "fg",2) == 0
+        || strncmp(command, "bg",2) == 0) {
+        return 1;
+    } 
+
+    // Check for invalid combinations
+    if (strstr(command, "fg &") != NULL || strstr(command, "fg |") != NULL) {
+        const char *errorMsg = "Invalid command: fg cannot be used with & or |\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return 0;  // Changed from return; to return 0
+    }
+    // Check if command starts with special characters
+    if (command[0] == '<' || command[0] == '>' || command[0] == '|' || command[0] == '&') {
+        const char *errorMsg = "Invalid command: commands cannot start with <>|&\n# ";
+        send(psd, errorMsg, strlen(errorMsg), 0);
+        return 0;  // Changed from return; to return 0
+    }
+
+
+    // Parse command into arguments
+    char *cmd_args[MAX_ARGS];
+    int i = 0;
+    char *cmd_copy = strdup(command);  // Make a copy as strtok modifies the string
+    
+    cmd_args[i] = strtok(cmd_copy, " ");
+    while (cmd_args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        cmd_args[i] = strtok(NULL, " ");
+    }
+    cmd_args[i] = NULL;
+
+    // Create pipes for capturing error output
+    int error_pipe[2];
+    if (pipe(error_pipe) == -1) {
+        perror("pipe");
+        free(cmd_copy);
+        return 0;  // Changed from return; to return 0
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        close(error_pipe[0]);
+        dup2(error_pipe[1], STDERR_FILENO);  // Redirect stderr to pipe
+        close(error_pipe[1]);
+
+        execvp(cmd_args[0], cmd_args);
+        // If execvp returns, there was an error
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Command '%s' not found\n", cmd_args[0]);
+        write(STDERR_FILENO, error_msg, strlen(error_msg));
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Parent process
+        close(error_pipe[1]);
+        
+        // Read any error output
+        char error_buffer[1024] = {0};
+        ssize_t bytes_read = read(error_pipe[0], error_buffer, sizeof(error_buffer) - 1);
+        close(error_pipe[0]);
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+            // Command was invalid or failed
+            send(psd, error_buffer, strlen(error_buffer), 0);
+            send(psd, "\n# ", 3, 0);
+            free(cmd_copy);
+            return 0;
+        }
+    }
+
+    free(cmd_copy);
+    return 1;  // Added return 1 for success
+}
+
+void print_jobs(int psd) {
+    char buffer[BUFFER_SIZE];
+    for (int i = 0; i < job_count; i++) {
+        snprintf(buffer, BUFFER_SIZE, "[%d]%c %s %s%s\n" ,
+        jobs[i].job_id,
+        jobs[i].job_marker,
+        jobs[i].is_running ? "Running" : "Stopped",
+        jobs[i].command,
+        jobs[i].is_background ? " &" : "");
+    //for (int i = 0; i < job_count; i++) {
+    //    printf(psd,"[%d]%c %s %s%s\n", jobs[i].job_id, jobs[i].job_marker, 
+    //    jobs[i].is_running ? "Running" : "Stopped",  
+    //    jobs[i].command, jobs[i].is_background ? " &" :"");
+    //    //char job_marker = (i == job_count -1 ) ? '+' : '-';
+    //    //if(jobs[i].is_running){    
+
+        // Testing purposes to see in client 
+        //jobs[i].is_running ? "Running" : "Stopped",  
+        //jobs[i].command, jobs[i].is_background ? " &" :"");
+        //printf("[%d]%c %s %s%s\n", jobs[i].job_id, jobs[i].job_marker, 
+        // Send the job status to the client 
+        send(psd, buffer, strlen(buffer), 0);
+    }
+}
+void add_job(pid_t pid, const char *command, int is_running, int is_background) {
+    // Check to see if the job table is full 
+    if (job_count >= MAX_JOBS) {
+        printf("Job list is full\n");
+        return;
+    }
+    // Set the job marker for the new job as '+' and others as '-'
+    for (int i = 0; i < job_count; i++) {
+        jobs[i].job_marker = '-';
+    }
+    // Add the new job with its attributes 
+    jobs[job_count].pid = pid;
+    jobs[job_count].job_id = (job_count > 0) ? jobs[job_count - 1].job_id + 1 : 1;
+    jobs[job_count].command = strdup(command);
+    jobs[job_count].is_running = is_running;
+    jobs[job_count].is_stopped = !is_running;
+    jobs[job_count].is_background = is_background;
+    jobs[job_count].job_marker = '+';  // Most recent job gets '+'
+    job_count++;
+
+    printf("Added job: [%d] %c %s %s\n",
+           jobs[job_count - 1].job_id,
+           jobs[job_count - 1].job_marker,
+           is_running ? "Running" : "Stopped",
+           command);
+    update_job_markers();
+}
+void update_job_markers() {
+    if (job_count == 0) return;
+
+    for (int i = 0; i < job_count; i++) {
+        jobs[i].job_marker = '-'; 
+    }
+
+    // Mark the most recent jobs with a + 
+    jobs[job_count - 1].job_marker = '+';
+    if (job_count > 1) {
+        jobs[job_count -2]. job_marker = '-';
+    }
+  
+}
+void bg_job(int job_id, int psd) {
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id && jobs[i].is_stopped) {
+            jobs[i].is_running = 1;
+            jobs[i].is_stopped = 0;
+            jobs[i].is_background = 1;
+            
+            // Send Sigcont to continue the job
+            kill(-jobs[i].pid, SIGCONT);
+
+            char buffer[BUFFER_SIZE];
+            snprintf(buffer, BUFFER_SIZE, "[%d]%c %s &\n", jobs[i].job_id, jobs[i].job_marker, jobs[i].command);
+            send(psd, buffer, strlen(buffer), 0 );
+            dprintf(psd, "%s# ", buffer); // prints teh command when bringing to the foreground
+            return;
+            //break;
+        }
+    }
+    send(psd, "Job not found\n", 15, 0);
+}
+void fg_job(int job_id, int psd) { // Used from from Dr.Y book Page-45-49 
+    int status;
+
+    for (int i = 0; i < job_count; i++) {
+        if (jobs[i].job_id == job_id) {
+            fg_pid = jobs[i].pid;// Set the foreground process ID
+            jobs[i].is_running = 1; // Mark the job as running 
+            dprintf(psd, "%s\n", jobs[i].command); // prints teh command when bringing to the foreground
+            printf("%s\n", jobs[i].command); // Print the command and send it to the client Debugging 
+            
+            char buffer[BUFFER_SIZE];
+            snprintf(buffer, BUFFER_SIZE, "%s\n", jobs[i].command);
+            send(psd, buffer, strlen(buffer), 0);
+            
+            // Send SIGCONT to continue the job // brings the job to the foreground
+            kill(-jobs[i].pid, SIGCONT);// Wait for the process to cont. the stopped proces
+            waitpid(jobs[i].pid, &status, WUNTRACED); // wait for the process to finish or be stopped again should it be zero or wuntrance
+            fg_pid = -1; // Clear foreground process , no longer a fg process 
+            
+            // update job status if it was stopped again 
+            if (WIFSTOPPED(status)) {
+                jobs[i].is_running = 0; // Mark as stopped
+                jobs[i].is_stopped = 1; 
+            } else {
+                // Job finished remove it from the job list
+                //dprintf(psd, "[%d] Done %s\n", jobs[i].job_id, jobs[i].command);  
+                //printf("[%d] Done %s\n", jobs[i].job_id, jobs[i].command); 
+
+                for (int j = i; j < job_count - 1; j++) {
+                    jobs[j] = jobs[j + 1 ];
+                }
+                job_count--;
+                update_job_markers();
+            }
+            // Once completed mark the job as done or remove it 
+            //printf("[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
+            //break;
+            return;
+        }
+    }  
+    dprintf(psd, "job not found\n");
+    printf("Job not found\n");
+}
+//signal handler for sigtstp ctrl z
+void sigint_handler(int sig)
+{
+    printf("SIGINT (Ctrl+C) handler called in daemon process\n");
+    printf("sigint handler called\n");
+    if (fg_pid > 0) {
+        // if there is a foreground process , send sigint to it
+        kill(fg_pid, SIGINT);
+        printf("\nSent SigINT to foreground process\n");
+    } else {
+        printf("\nNo foreground process to send SIGINT.\n");
+    }
+
+    write(STDOUT_FILENO, PROMPT, 3);
+    fflush(stdout); // ensure the prompt is displayed immediately after the message
+}
+// signal handler for sigtstp ctrl z
+void sigtstp_handler(int sig)
+{
+    printf("SIGTSTP (Ctrl+Z) handler called in daemon process\n");
+    //fflush(stdout);
+    printf("SIGTSTP (Ctrl+Z) handler called\n");
+    if (fg_pid > 0)
+    {
+        // if there is a foreground process , send sigint to it
+        kill(fg_pid, SIGTSTP);
+
+        // find the command associat with the foreground process and add it
+        for (int i = 0; i < job_count; i++)
+        {
+            if (jobs[i].pid == fg_pid) {
+                jobs[i].is_running = 0;
+                jobs[i].is_stopped = 1;
+                jobs[i].job_marker = '+'; // set marker for the most recent job
+                // printf("\n[%d]      Stopped %s\n" ,jobs[i].job_id, jobs[i].command);
+                break;
+            }
+        }
+
+        fg_pid = -1; // clear the foreground process
+        printf("\nSent SIGTSTP to foreground process. dprint\n");
+        fflush(stdout); // ensure the prompt is displayed immediately after the message
+        //const char *msg = "Type fg to resume.\n";
+        //send(psd, msg, strlen(msg), 0);
+    } else {
+        printf("\nNo foreground process to send SIGTSTP.\n#");
+    }
+}
+// signal handler for sigtstp ctrl z
+void sigchld_handler(int sig) {
+    printf("SIGCHLD handler called in daemon process\n");
+    fflush(stdout);
+    printf("SIGCHLD handler called\n");
+    int status;
+    pid_t pid;
+    // Clean up zombie child processes non blocking wait
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        for (int i = 0; i < job_count; i++) {
+            if (jobs[i].pid == pid) {
+                printf("/n[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
+                free(jobs[i].command);
+
+                //if (WIFEXITED(status) || WIFSIGNALED(status))
+                //{
+                //    // print done messageif needed
+                //    printf("\n[%d] Done %s\n", jobs[i].job_id, jobs[i].command);
+                //    // remove the job from the job list
+                //    for (int j = i; j < job_count - 1; j++)
+                //    {
+                //        jobs[j] = jobs[j + 1];
+                //    }
+                //    job_count--;
+                //}
+                for (int j = i; j < job_count - 1; j++) {
+                    jobs[j] = jobs[j + 1];
+                }
+                job_count--;
+                update_job_markers();
+                break;
+            }
+        }
+    }
+}
+int check_background(char *command) {
+    int length = strlen(command);
+    // check if the command ends with & 
+    if (length > 0 && command[length -1 ] == '&') {
+        command[length - 1] = '\0'; // Remove the & character
+ 
+        return 1; // Indicates it is a background command 
+    }
+    return 0; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void add_job(pid_t pid, const char *command, int is_running, int is_background);
 void update_job_markers(int current_job_index) ;
 void print_jobs();

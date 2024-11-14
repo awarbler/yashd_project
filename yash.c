@@ -194,7 +194,6 @@ void* communication_thread(void *args){
         // read response from the server
         bytesRead = recv(sockfd, buf, BUFFER_SIZE -1, 0);
         if (bytesRead < 0) {
-            perror("Error receiving response from server");
             pthread_exit(NULL);
         } else if (bytesRead == 0) {
             // server has closed the connection 
