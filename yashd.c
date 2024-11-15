@@ -973,6 +973,9 @@ void handle_control(int psd, char control, pid_t pid) {
             const char *msg = "Sent SIGTSTP to foreground process.\n# ";
             send(psd, msg, strlen(msg), 0);
             printf("Sent SIGTSTP to child process %d\n", fg_pid);
+            // add the process to the job list if its not already there 
+            add_job(pid, "Stopped", 0);
+            update_job_status(pid, 0,1);
         } else {
             const char *msg = "No foreground process to send SIGTSTP.\n# ";
             send(psd, msg, strlen(msg), 0);
@@ -982,12 +985,13 @@ void handle_control(int psd, char control, pid_t pid) {
         // if (pipefd_stdin[1] != -1) {
         //close(pipefd_stdin[1]);
         // pipefd_stdin[1] = -1;
-        printf("received a control d ");// debugging 
-        const char *msg = "Closed write end of the stdin pipe exiting thread.\n";
+        printf("received Ctrl_D");// debugging 
+        const char *msg = "Closed Ctrl_D Shutting Down Server.\n";
         send(psd, msg, strlen(msg), 0);
-        printf("Closed write end of stdin pipe\n");
+        printf("received Ctrl_D Closed Server\n");
         close(psd);
         pthread_exit(NULL);
+        exit(0);
         //}
         // commandRunning = 0;
     } else {
@@ -1073,7 +1077,7 @@ void sigtstp_handler(int sig) {
 
         // If not found, add it as a stopped job
         if (!found) {
-            add_job(fg_pid, "Stopped foreground job", 0);
+            add_job(fg_pid, "Stopped", 0);
             update_job_status(fg_pid, 0, 1);
         }
 
