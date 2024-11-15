@@ -1,17 +1,22 @@
-# yashd_project
+# Project Two Systems Programming
 
 Project Two 
 
-#
+# Collaborators
+
+* Anita Woodford 
+* Juan Gabriel Palacios Rodas quit the class in the middle of the project. 
 
 # Overview
+This project covers key concepts in Unix systems programming, including process creation, inter-process communication, signal handling, job control, and socket programming. It is divided into two parts:
+
+- **Project 1:** Implementation of a command-line shell (`yash`).
+- **Project 2:** Extension of the shell into a network service daemon (`yashd`).
+
 
 <!-- {Important!  Do not say in this section that this is college assignment.  Talk about what you are trying to accomplish as a software engineer to further your learning.}
 
 {Provide a description the software that you wrote to demonstrate the Java language.}-->
-
-
-
 
 <!--{Describe your purpose for writing this software.}-->
 
@@ -58,12 +63,78 @@ yashd_project/<br>
 
 |- .gitignore VS version<br>
 
+# Objective 
+## Project 1 and Project 2
 
-# Collaborators
+Create a command-line interpreter called `yash` that mimics basic functionalities of Unix shells like Bash. Implement key features such as file redirection, piping, signal handling, and job control. 
+Extend your shell into a network service daemon (`yashd`) that mimics the behavior of an SSH daemon (`sshd`). Implement a client (`yash`) that communicates with the daemon over a TCP/IP socket.
 
-* Anita Woodford 
-* Juan Gabriel Palacios Rodas quit the class in the middle of the project. 
-*
+
+### Key Features
+
+1. **File Redirection:**
+   - Support input (`<`) and output (`>`) redirection.
+   - Automatically create output files if they do not exist.
+   - Fail if the input file does not exist.
+   - Handle redirection with commands, e.g., `ls > output.txt`.
+
+2. **Piping:**
+   - Implement single-level piping using the `|` operator.
+   - Redirect the output of the left command to the input of the right command.
+   - Ensure that the commands in a pipeline start and stop together.
+
+3. **Signal Handling:**
+   - Handle `SIGINT` (Ctrl+C) to terminate the foreground process without killing the shell.
+   - Handle `SIGTSTP` (Ctrl+Z) to stop the current foreground process.
+   - Reap child processes using `SIGCHLD` to prevent zombie processes.
+
+4. **Job Control:**
+   - Support background processes using `&`.
+   - Implement `fg`, `bg`, and `jobs` commands for job management.
+   - Manage a list of active jobs and their states (running, stopped).
+   - Display jobs similar to Bash, including job IDs and status indicators (`+`, `-`).
+
+5. **Miscellaneous:**
+   - Inherit environment variables from the parent shell.
+   - Search for executables in the `PATH` environment variable.
+   - Provide a prompt (`# `) to indicate readiness for input.
+   **Daemon Initialization:**
+   - Implement `yashd` as a proper Unix daemon process.
+   - Follow guidelines for daemon processes, including detaching from the terminal, handling signals, and creating a PID file to prevent multiple instances.
+
+6. **Multi-threaded Server:**
+   - Use `pthreads` to create a multi-threaded server.
+   - Handle each client connection in a separate thread for responsiveness.
+   - Execute commands using the `fork-exec` model, returning the output to the client over the socket.
+
+7. **Client-Server Communication:**
+   - The client connects to the server using a well-defined port (3820).
+   - The client sends commands using a simple protocol:
+     - `CMD <command>\n` for command execution.
+     - `CTL <c|z|d>\n` for control signals (Ctrl+C, Ctrl+Z, Ctrl+D).
+     - Plain text input (e.g., for `cat > file.txt`) is sent directly to the server.
+   - The server responds with plain ASCII text and a prompt (`\n# `) to indicate the end of output.
+
+8. **Logging:**
+   - Log client requests in `/tmp/yashd.log` in a syslog-like format, including the date, client IP, port, and executed command.
+
+9. **Signal Handling and Job Control:**
+   - Handle `SIGINT` and `SIGTSTP` signals sent by the client to control the server’s running commands.
+   - Implement job control commands (`jobs`, `fg`, `bg`) on the server side, allowing clients to manage processes remotely.
+
+
+
+### Requirements and Restrictions
+
+- Implemented in ANSI C (C99 or GNU99).
+- Must include a `Makefile` for building the project.
+- Line length is limited to 200 characters.
+- The shell should not use the `system()` function for command execution.
+- The server must bind to port 3820 using `SO_REUSEADDR` for port reuse.
+- Follow a standardized protocol for cross-compatibility with other implementations.
+- Include a `Makefile` to build the server (`yashd`) and client (`yash`).
+
+
 
 # Implementation Report
 
@@ -221,7 +292,14 @@ yashd_project/<br>
 
 By addressing these issues, the server and client implementations will better align with the requirements of both Project 1 and Project 2. This will help ensure a more robust and compliant solution.
 
+## Deliverables
 
+- Source code for `yash` (shell), `yashd` (daemon), and `yash` (client).
+- `Makefile` for building the project.
+- Log file (`/tmp/yashd.log`) generated during server operation.
+- For submission, include all source files and the `Makefile` in an archive (`yashd.tgz`).
+
+---
 
 Team Programming Assignment (02)
 
