@@ -136,17 +136,92 @@ yashd_project/<br>
 ### Edge Case Handling
 - Add checks for invalid job IDs in `fg_command()` and `bg_command()` to avoid unexpected behavior when the job ID is not found.
 
-## Conclusion
-The current implementation satisfies most of the requirements specified in the project documentation. Address the minor issues noted above for a complete and robust submission.
 
 
   
-# Instructions
+# Future Work
+
+## Daemon Initialization
+
+- **Issue**: Lack of proper signal handling in `daemon_init()` for signals like `SIGINT`, `SIGTERM`, and `SIGQUIT`.
+  - **Fix**: Add handlers for `SIGINT` and `SIGTERM` to shut down the server and close the socket cleanly.
+
+## File Redirection
+
+- **Issue**: The `apply_redirections()` function may have potential memory leaks due to `strdup()` usage without `free()` when files are closed.
+  - **Fix**: Free `input_file`, `output_file`, and `error_file` strings after use.
+- **Issue**: The current redirection implementation does not handle permission issues correctly when creating files.
+  - **Fix**: Use `S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH` as file permissions when creating output files to ensure the correct access.
+
+## Piping
+
+- **Issue**: The implementation of `validatePipes()` and `handle_pipe()` does not handle cases where the pipe character (`|`) is the first or last character in the command string.
+  - **Fix**: Add validation checks in `validatePipes()` to ensure that commands do not start or end with a pipe. Return an error message if this is the case.
+- **Issue**: The current piping implementation does not handle synchronization properly between child processes.
+  - **Fix**: Group child processes together with `setpgid()`. This allows signal handling (like `SIGTSTP` or `SIGINT`) to affect both processes simultaneously.
+
+## Signal Handling
+
+- **Issue**: Signal handlers for `SIGINT`, `SIGTSTP`, and `SIGCHLD` in the server (`yashd.c`) are not properly managing job states, especially for background jobs.
+  - **Fix**: Enhance `sigtstp_handler()` and `sigint_handler()` to update the job status when the foreground process is stopped or killed.
+  - **Fix**: In `sigchld_handler()`, ensure all child processes are reaped using a loop (`waitpid(-1, NULL, WNOHANG)`).
+- **Issue**: Signal handling for `SIGPIPE` is not robust. Currently, `sig_pipe()` exits the process on receiving `SIGPIPE`.
+  - **Fix**: Log the error and handle the broken pipe gracefully by closing the client socket and cleaning up resources instead of exiting.
 
 
-# Requirements
+## Job Control
 
-# Rubric
+- **Issue**: The `add_job()` function does not check if the job list is full (`job_count >= MAX_JOBS`), leading to potential overflow.
+  - **Fix**: Add a check in `add_job()` to return an error if `job_count` exceeds `MAX_JOBS`.
+- **Issue**: The `fg_command()` and `bg_command()` functions do not update the job markers (`+` and `-`) correctly when bringing a job to the foreground or resuming it in the background.
+  - **Fix**: Reassign job markers based on the most recent jobs after updating the job status.
+- **Issue**: The `print_jobs()` function does not remove completed jobs, leading to outdated job entries.
+  - **Fix**: Call `remove_job()` for any exited job before printing the job list.
+
+
+## Client-Server Communication
+
+- **Issue**: The client (`yash.c`) does not handle large outputs from the server efficiently. It reads from the socket in a fixed-size buffer and might miss some output if the response is large.
+  - **Fix**: Implement a loop in `recv()` to handle partial reads and accumulate the response until the prompt (`\n# `) is detected.
+- **Issue**: The client does not properly handle `Ctrl+D` (EOF) to exit the input loop.
+  - **Fix**: Add handling for `feof(stdin)` in the `GetUserInput()` function and send a disconnect message (`CTL d`) to the server before closing the socket.
+
+
+## Logging
+
+- **Issue**: The `logRequest()` function does not handle cases where the log file cannot be opened due to permissions issues.
+  - **Fix**: Check the return value of `fopen()` and attempt to create the log file with appropriate permissions if it does not exist.
+- **Issue**: Potential race condition in `logRequest()` when multiple threads try to write to the log file simultaneously.
+  - **Fix**: Use `pthread_mutex_lock()` and `pthread_mutex_unlock()` around the entire logging block to ensure thread-safe access.
+
+
+## Protocol Adherence
+
+- **Issue**: The server does not always send the prompt (`\n# `) back to the client after completing a command execution.
+  - **Fix**: Ensure that every command handler (including job control commands) sends the prompt to the client before returning.
+- **Issue**: The client does not consistently differentiate between `CMD`, `CTL`, and plain text messages.
+  - **Fix**: Add checks in `send_command_to_server()` to ensure that plain text (e.g., input for `cat > file.txt`) is handled differently from `CMD` and `CTL` messages.
+
+
+## Makefile
+
+- **Issue**: The Makefile is missing from the provided code, which is required for building the project.
+  - **Fix**: Create a `Makefile` that compiles `yash.c` and `yashd.c` into `yash` and `yashd` executables, respectively. Use the `-pthread` flag for compiling with `pthreads`.
+
+
+## General Code Quality
+
+- **Issue**: Memory leaks in `strdup()` calls throughout the code (e.g., in `add_job()`, `handle_pipe()`, `apply_redirections()`).
+  - **Fix**: Ensure all `strdup()` strings are freed after use.
+- **Issue**: Inconsistent error handling (e.g., sometimes `perror()` is called, other times not).
+  - **Fix**: Standardize error handling using `perror()` and provide meaningful error messages.
+
+
+## Summary
+
+By addressing these issues, the server and client implementations will better align with the requirements of both Project 1 and Project 2. This will help ensure a more robust and compliant solution.
+
+
 
 Team Programming Assignment (02)
 
