@@ -5,6 +5,7 @@
 // Run: kill -9 <PID>
 
 #include "yashd.h"
+#define MAX_COMMAND_LENGTH 1024
 
 // int psd;
 
@@ -153,8 +154,8 @@ int main(int argc, char **argv ) {
     printf("----TCP/Server running at host NAME: %s\n", ThisHost);
 
     // TO-DO: Initialize the daemon
-    // daemon_init(server_path, 0);
-    // printf("Daemon initialzied.\n")
+    //daemon_init(server_path, 0);
+    printf("Daemon initialzied.\n");
 
     if ((hp = gethostbyname(ThisHost)) == NULL ) {
       fprintf(stderr, "Can't find host %s\n", argv[1]);
@@ -321,20 +322,16 @@ void *serveClient(void *args) {
 
             if (strcmp(command, "jobs") == 0) {
                 print_jobs(psd);
-                if (!is_background) {
-                    send(psd, PROMPT, strlen(PROMPT), 0);
-                }
-                // send(psd, PROMPT, strlen(PROMPT), 0);
+
+                send(psd, PROMPT, strlen(PROMPT), 0);
                 continue;
             } 
             
             if (strncmp(command, "fg ", 3) == 0) {
                 int job_id = atoi(command + 3);
                 fg_command(job_id, psd);
-                if (!is_background) {
-                    send(psd, PROMPT, strlen(PROMPT), 0);
-                }
-                //send(psd, PROMPT, strlen(PROMPT), 0);
+
+                send(psd, PROMPT, strlen(PROMPT), 0);
                 continue;
             } 
             
@@ -354,12 +351,12 @@ void *serveClient(void *args) {
                 command[strlen(command) - 1] = '\0';
             }
 
-            // Check if the command ends with '&'
-            if (strlen(command) > 0 && command[strlen(command) - 1] == '&') {
+            if (strstr(command, "&") != NULL) {
                 is_background = 1;
-                command[strlen(command) - 1] = '\0'; // Remove '&' character
+                char *ampersand = strrchr(command, '&');
+                *ampersand = '\0'; // Remove '&' character
 
-                // Trim any trailing whitespace again
+                // Trim any trailing whitespace
                 while (strlen(command) > 0 && isspace(command[strlen(command) - 1])) {
                     command[strlen(command) - 1] = '\0';
                 }
@@ -402,6 +399,20 @@ void *serveClient(void *args) {
                 cmd_args[i] = strtok(NULL, " ");
             }
             cmd_args[i] = NULL;
+
+            // Validate command arguments debugging
+
+            if (cmd_args[0] == NULL) {
+                const char *errorMsg = "Error: Validate command Invalid command or empty input\n";
+                send(psd, errorMsg, strlen(errorMsg), 0);
+                return;
+            }
+
+            // Debugging: Print parsed arguments
+            printf("Executing command: %s\n", cmd_args[0]);
+            for (int j = 0; cmd_args[j] != NULL; j++) {
+                printf("Argument %d: %s\n", j, cmd_args[j]);
+            }
 
             // Create pipe for output
             int pipe_fd[2];
@@ -463,30 +474,25 @@ void *serveClient(void *args) {
             }
 
             if (is_background) {
-                pid = fork();
-                if (pid == 0) { // Child process
-                    setpgid(0, 0); // Set the process group
-                    execvp(cmd_args[0], cmd_args);
-                    perror("Error serverClient child process execvp failed");
-                    exit(EXIT_FAILURE);
-                } else if (pid > 0) {
-                    setpgid(pid, pid);
-                    add_job(pid, command, 1);
-                    printf("Started background job [%d] with PID %d: %s\n", next_job_id - 1, pid, command);
-                } else {
-                    perror("fork");
-                }
-            }
+               // Add the job immediately with a placeholder PID (0) to prevent race condition
+               add_job(0, command, is_background);
 
-            // Wait for the foreground process to change state (terminated, stopped, or continued)
-            if (is_background) {
-                // Start the background job without waiting
-                add_job(pid, command, 1);
-                printf("Started background job [%d] with PID %d: %s\n", next_job_id - 1, pid, command);
-
-                // Send prompt back to the client immediately
-                send(psd, PROMPT, strlen(PROMPT), 0);
-            } else {
+               pid_t bg_pid = fork();
+               if (bg_pid == 0) { // Background child process
+                   setpgid(0, 0);
+                   execvp(cmd_args[0], cmd_args);
+                   perror("Error serverClient execvp failed");
+                   exit(EXIT_FAILURE);
+               } else if (bg_pid > 0) {
+                   setpgid(bg_pid, bg_pid);
+                   // Update the job with the correct PID
+                   jobs[job_count - 1].pid = bg_pid;
+                   printf("Started background job [%d] with PID %d: %s\n", next_job_id - 1, bg_pid, command);
+                   send(psd, PROMPT, strlen(PROMPT), 0);
+               } else {
+                   perror("fork");
+               }
+            }  else {
                 // Wait for the foreground process to change state (terminated, stopped, or continued)
                 fg_pid = pid;
                 int status;
@@ -504,8 +510,8 @@ void *serveClient(void *args) {
                     fg_pid = -1;
                 } else if (WIFEXITED(status)) {
                     printf("Foreground process [%d] exited with status %d.\n", fg_pid, WEXITSTATUS(status));
-                    remove_job(fg_pid);
-                    fg_pid = -1;
+                    update_job_status(fg_pid, 0, 0);
+                    //fg_pid = -1;
                 }
 
             close(pipe_fd[0]);
@@ -895,9 +901,12 @@ void log_command(const char *command, struct sockaddr_in from) {
     }
     // Prepare the command string for loggin 
     char log_command_str[BUFFER_SIZE];
+  
 
     // Populate log arguments
     strncpy(log_args->request, command, sizeof(log_args->request) - 1);
+
+    
     //strncpy(log_args->request, log_command_str, sizeof(log_args->request) - 1);
     log_args ->request[sizeof(log_args->request) - 1] = '\0'; // Ensures null termination 
     log_args->from = from;
@@ -1050,47 +1059,62 @@ void sigint_handler(int sig) {
 void sigtstp_handler(int sig) {
     if (fg_pid > 0) {
         kill(fg_pid, SIGTSTP);
-        update_job_status(fg_pid, 0, 1);
         printf("Sent SIGTSTP to foreground process %d\n", fg_pid);
+
+        // Check if the job is already in the list
+        int found = 0;
+        for (int i = 0; i < job_count; i++) {
+            if (jobs[i].pid == fg_pid) {
+                found = 1;
+                update_job_status(fg_pid, 0, 1); // Mark as stopped
+                break;
+            }
+        }
+
+        // If not found, add it as a stopped job
+        if (!found) {
+            add_job(fg_pid, "Stopped foreground job", 0);
+            update_job_status(fg_pid, 0, 1);
+        }
+
         fg_pid = -1;
     } else {
         printf("No foreground process to send SIGTSTP.\n");
     }
-    //printf("# ");
-    //fflush(stdout);
 }
+
+
 // Handler for SIGCHLD (child process state change)
 void sigchld_handler(int sig) {
     int status;
     pid_t pid;
-
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
-        if (WIFEXITED(status)) {
-            printf("Child process [%d] exited with status %d.\n", pid, WEXITSTATUS(status));
-            remove_job(pid);
-        } else if (WIFSIGNALED(status)) {
-            printf("Child process [%d] was terminated by signal %d.\n", pid, WTERMSIG(status));
-            remove_job(pid);
-        } else if (WIFSTOPPED(status)) {
-            printf("Child process [%d] was stopped.\n", pid);
-            update_job_status(pid, 0, 1);
-        } else if (WIFCONTINUED(status)) {
-            printf("Child process [%d] continued.\n", pid);
-            update_job_status(pid, 1, 0);
+        for (int i = 0; i < job_count; i++) {
+            if (jobs[i].pid == pid) {
+                if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                    printf("Child process [%d] finished. Removing job.\n", pid);
+                    remove_job(pid);
+                } else if (WIFSTOPPED(status)) {
+                    update_job_status(pid, 0, 1);
+                } else if (WIFCONTINUED(status)) {
+                    update_job_status(pid, 1, 0);
+                }
+                return;
+            }
+        }
+        // Suppress this message if the process was not in the job list (likely a foreground process)
+        if (fg_pid != pid) {
+            printf("DEBUG: Job with PID %d not found. Ignoring.\n", pid);
         }
     }
-    // Restore terminal control to the shell if needed
-    tcsetpgrp(STDIN_FILENO, getpid());
 }
 
-void add_job(pid_t pid, const char *command, int is_background) {
-    // Check if the job table is full
+void add_job(pid_t pid, const char *full_command, int is_background) {
     if (job_count >= MAX_JOBS) {
         printf("Error: Job list is full. Cannot add more jobs.\n");
         return;
     }
 
-    // Check if the job with the same PID already exists
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].pid == pid) {
             printf("Error: Job with PID %d already exists.\n", pid);
@@ -1098,19 +1122,24 @@ void add_job(pid_t pid, const char *command, int is_background) {
         }
     }
 
-    // Add the new job
+    // Copy the full command with its arguments.
+    char *command_copy = strdup(full_command);
+    if (!command_copy) {
+        perror("Error: Failed to allocate memory for command string");
+        return;
+    }
+
     jobs[job_count].pid = pid;
     jobs[job_count].job_id = next_job_id++;
-    jobs[job_count].command = strdup(command);
+    jobs[job_count].command = command_copy;  // Store the full command with arguments
     jobs[job_count].is_running = 1;
     jobs[job_count].is_stopped = 0;
     jobs[job_count].is_background = is_background;
     jobs[job_count].job_marker = ' ';
 
-    // Wrap around `next_job_id` if it exceeds MAX_JOBS
     if (next_job_id > MAX_JOBS) next_job_id = 1;
 
-    printf("DEBUG: Added job [%d] with PID %d: %s\n", jobs[job_count].job_id, pid, command);
+    printf("DEBUG: Added job [%d] with PID %d: %s\n", jobs[job_count].job_id, pid, command_copy);
     job_count++;
 }
 
@@ -1139,46 +1168,51 @@ void update_job_status(pid_t pid, int is_running, int is_stopped) {
             jobs[i].is_running = is_running;
             jobs[i].is_stopped = is_stopped;
 
-            // Update the job marker based on the status
-            jobs[i].job_marker = (i == job_count - 1) ? '+' : '-';
+            // Update job marker
+            if (is_stopped) {
+                jobs[i].job_marker = '-';
+            } else if (is_running) {
+                jobs[i].job_marker = (i == job_count - 1) ? '+' : '-';
+            }
 
-            printf("DEBUG: Updated job [%d] - Running: %d, Stopped: %d\n",
-                   jobs[i].job_id, jobs[i].is_running, jobs[i].is_stopped);
+            const char *status = is_stopped ? "Stopped" : "Running";
+            printf("DEBUG: Updated job [%d] - Status: %s\n", jobs[i].job_id, status);
             return;
         }
     }
     printf("DEBUG: Job with PID %d not found. Cannot update status.\n", pid);
 }
 
+
 /**
  * @brief Prints the list of jobs to the client.
  * @param psd Socket descriptor for sending output to the client.
  */
 void print_jobs(int psd) {
-    char buffer[4096] = "";  // Increased buffer size for safety
+    char buffer[4096] = "";
     printf("DEBUG: Active job count: %d\n", job_count);
 
     for (int i = 0; i < job_count; i++) {
-        const char *status = jobs[i].is_running ? "Running" : "Stopped";
-        char job_marker = (i == job_count - 1) ? '+' : '-';
+        if (i == job_count - 1) {
+            jobs[i].job_marker = '+';  // Most recent job
+        } else if (i == job_count - 2) {
+            jobs[i].job_marker = '-';  // Second most recent job
+        } else {
+            jobs[i].job_marker = ' ';  // No marker for other jobs
+        }
 
-        // Format job information
+        const char *status = jobs[i].is_running ? "Running" : "Stopped";
         char job_info[256];
         snprintf(job_info, sizeof(job_info), "[%d]%c %s %s\n",
-                 jobs[i].job_id, job_marker, status, jobs[i].command);
+                 jobs[i].job_id, jobs[i].job_marker, status, jobs[i].command);
 
-        // Append job information to the buffer
         strncat(buffer, job_info, sizeof(buffer) - strlen(buffer) - 1);
     }
 
-    // Append the prompt to ensure the client receives it
     strncat(buffer, "# ", sizeof(buffer) - strlen(buffer) - 1);
-
-    // Send the formatted jobs list to the client
     send(psd, buffer, strlen(buffer), 0);
     printf("Jobs list sent to client:\n%s", buffer);
 }
-
 
 
 void fg_command(int job_id, int psd) {
@@ -1203,10 +1237,22 @@ void fg_command(int job_id, int psd) {
 
             // Update job status based on the wait result
             if (WIFSTOPPED(status)) {
-                update_job_status(fg_pid, 0, 1);
-            } else {
-                remove_job(fg_pid);
+            printf("Foreground process [%d] was stopped.\n", fg_pid);
+            int found = 0;
+            for (int i = 0; i < job_count; i++) {
+                if (jobs[i].pid == fg_pid) {
+                    found = 1;
+                    update_job_status(fg_pid, 0, 1);
+                    break;
+                }
             }
+            // Add to job list if not found
+            if (!found) {
+                add_job(fg_pid, "Foreground job", 0);
+                update_job_status(fg_pid, 0, 1);
+            }
+            fg_pid = -1;
+        }
 
             fg_pid = -1;
             if (!is_background) {
@@ -1224,8 +1270,9 @@ void bg_command(int job_id, int psd) {
     for (int i = 0; i < job_count; i++) {
         if (jobs[i].job_id == job_id && jobs[i].is_stopped) {
             kill(jobs[i].pid, SIGCONT);
-            jobs[i].is_running = 1;
-            jobs[i].is_stopped = 0;
+            update_job_status(jobs[i].pid, 1, 0);
+            //jobs[i].is_running = 1;
+            //jobs[i].is_stopped = 0;
             jobs[i].is_background = 1;
 
             char msg[BUFFER_SIZE];
