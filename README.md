@@ -301,5 +301,123 @@ By addressing these issues, the server and client implementations will better al
 
 ---
 
+# Test Cases for Project 2 (Yash Daemon)
+
+## Basic Functionality - 20 Points
+
+- **Example Test Cases:**
+  - **Basic Command:** `# date`
+  - **Command with Arguments:** `# ls -a -l`
+  - **Prompt:** Does it prompt with `# `?
+  - **Termination:** Does it terminate with Ctrl-D?
+    - Ctrl-C can print `^C` or `^C#`
+    - Ctrl-Z can print `^Z` or `^Z#`
+  - **All Basic Commands - PASS:**
+    - Commands: `ls`, `ls -a -l`, `date`, `echo` - **PASS**
+    - Prompting with `# ` - **PASS**
+    - Ctrl+D - Terminating - **PASS**
+
+- **Invalid Commands:**
+  - `# < ls`
+  - `# > ls`
+  - `# | ls`
+  - `# & ls`
+
+---
+
+## File Redirection - 20 Points
+
+- **Example Test Cases:**
+  - **Output Redirection:** `# ls > foo.txt`
+  - **Input Redirection:** `# wc < foo.txt`
+  - **Output File Creation:** `# ls > out.txt`
+  - **Input File Reading:** `# wc < out.txt`
+  - **Error Redirection:** `# cat fake_file 2> bar.txt`
+    - Output: `#`
+  - **Combined Redirection:** `# cat in1.txt > out1.txt | cat < in2.txt`
+    - Output: Content from `in2.txt`
+  - **Piping with File Input:** `# cat in1.txt | cat`
+    - Output: Content from `in1.txt`
+  - **Invalid Input File:** `# cat < fake-file.bar`
+  - **Hello World Check:** `# ./hello`
+    - Output: `Hello World, this is Anita Woodford ajw 4987`
+  - **Valid Redirections:**
+    - `echo "hello world" > temp.txt` - **PASS**
+    - `cat < temp.txt` - **PASS**
+    - `ls > foo.txt` - Output redirection - **PASS**
+    - `wc < foo.txt` - Input redirection - **PASS**
+    - Multiple redirections: `cat < my-file > your_file` - **FAIL**
+    - `cat < temp.txt > output.txt` - **Partial PASS**
+
+---
+
+## Piping - 20 Points
+
+- **Example Test Cases:**
+  - **Basic Pipe:** `# ls | wc`
+  - **Multiple Arguments:** `# ls -a -l -t -r . | wc -c -L`
+  - **Complex Redirection with Pipe:**
+    - `# left_child < in.txt > err1.txt | right_child > out.txt 2> err2.txt`
+  - **Results:**
+    - Basic pipe commands: `ls | wc` - **PASS**
+    - Multiple arguments: `ls -a -l -t -r . | wc -c -L` - **PASS**
+    - Pipe with file redirection: `cat in1.txt > out1.txt | cat < in2.txt` - **Partial PASS**
+
+---
+
+## Signal Handling - 20 Points
+
+- **Example Test Cases:**
+  - **Ctrl-C:** Terminates the command
+  - **Ctrl-C:** Terminates piped command
+  - **Ctrl-Z:** Stops the command
+  - **Ctrl-Z:** Stops piped command
+
+---
+
+## Job Control - 20 Points
+
+- **Example Test Cases:**
+  - **Basic Job Control:**
+    - Run a command, then Ctrl-Z, then `bg`, then `fg`.
+    - Create long-running background jobs and use `fg`, `bg`, and Ctrl-Z to switch between foreground, background, and stopped states.
+    - Kill some jobs by bringing them to the foreground and using Ctrl-C.
+    - Run the `jobs` command to display job states.
+  - **Example Sequence:**
+    - `# sleep 4`
+      - Output: `^Z# fg`
+    - `# sleep 4`
+      - Output: `^Z# bg`
+      - `[1]+ sleep 4 &`
+    - `# sleep 4 &`
+    - `# jobs`
+      - `[1]+ Running sleep 4 &`
+    - `# sleep 2 &`
+    - `# ls`
+      - `[1]+ Done sleep 2 &`
+    - `# sleep 5`
+      - Output: `^Z# sleep 10`
+      - `^Z sleep 15`
+    - `# jobs`
+      - `[2]- Stopped sleep 10`
+      - `[3]- Stopped sleep 15`
+      - `[4]+ Stopped sleep 20`
+    - `# fg`
+      - `[4]+ Stopped sleep 20`
+    - `# sleep 10`
+      - Output: `^Z# sleep 15`
+      - `^Z sleep 5 &`
+    - `# jobs`
+      - `[1]- Stopped sleep 10`
+      - `[2]- Stopped sleep 15`
+      - `[3]+ Stopped sleep 5 &`
+      - `[4]+ Stopped sleep 20`
+
+- **Allowed Redirections:**
+  - `echo "hello world" > temp.txt` - **PASS**
+  - `cat < temp.txt` - **PASS**
+  - `cat < temp.txt > output.txt` - **PASS**
+  - `cat < in1.txt > out1.txt | cat < in2.txt > out2.txt` - **PASS**
+
 Team Programming Assignment (02)
 
